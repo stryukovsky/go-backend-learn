@@ -1,13 +1,18 @@
 package main
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
 
 type CatForm struct {
 	Key string `json:"catName" binding:"required"`
 }
 
-type DogForm struct {
-	Key string `json:"dogName" binding:"required"`
+type Login struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 func main() {
@@ -30,6 +35,20 @@ func main() {
 		if err := ctx.ShouldBind(&cat); err == nil {
 			ctx.JSON(200, gin.H{
 				"message": "cat over there!",
+			})
+		}
+	})
+
+	router.POST("/login", func(ctx *gin.Context) {
+		user := Login{}
+		ctx.Bind(&user)
+		if user.Username == "Dima" && user.Password == "qwerty" {
+			ctx.JSON(http.StatusOK, gin.H{
+				"message": "successfully authenticated",
+			})
+		} else {
+			ctx.JSON(http.StatusForbidden, gin.H{
+				"message": "Cannot enter",
 			})
 		}
 	})
