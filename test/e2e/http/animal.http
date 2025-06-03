@@ -1,0 +1,6 @@
+POST localhost:8080/animal
+Content-Type: application/json
+
+{ 
+  "catName": "Meow"
+}
