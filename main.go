@@ -15,9 +15,6 @@ func main() {
 		panic("Cannot start db connection" + err.Error())
 	}
 	db.AutoMigrate(&trade.Deal{})
-	router.POST("/api/deal", func(ctx *gin.Context) {
-		trade.AddDeal(ctx, db)
-	})
-
+  trade.CreateApi(router, db)
 	router.Run()
 }
