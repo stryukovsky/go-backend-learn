@@ -1,0 +1,9 @@
+POST localhost:8080/api/deal
+Content-Type: application/json
+
+{ 
+  "inputToken": "A",
+  "outputToken": "B",
+  "inputAmount": "100"
+}
+
