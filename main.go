@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 func main() {
 	router := gin.Default()
 	db, err := gorm.Open(postgres.Open("postgresql://user:pass@localhost:5432/db"), &gorm.Config{})
@@ -15,6 +14,7 @@ func main() {
 		panic("Cannot start db connection" + err.Error())
 	}
 	db.AutoMigrate(&trade.Deal{})
-  trade.CreateApi(router, db)
+	trade.CreateApi(router, db)
 	router.Run()
 }
+
