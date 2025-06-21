@@ -10,18 +10,30 @@ import (
 
 type ERC20 struct {
 	contract eth.Contract
-	decimals big.Int 
+	decimals big.Int
 	name     string
 }
 
-func (token *ERC20) Transfer(recipient string, amount big.Int) {
-	token.contract.Call("transfer", recipient, amount)
+var (
+	BadBalance error = errors.New("Bad balance of ERC20 contract")
+)
 
+func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
+	rawBalance, err := token.contract.Call("balanceOf", recipient)
+	if err != nil {
+		return nil, err
+	}
+	var balance *big.Int
+	var success bool
+	if balance, success = rawBalance.(*big.Int); !success {
+		return nil, BadBalance
+	}
+	return balance, nil
 }
 
 var (
 	BadDecimalsValue error = errors.New("Bad decimals of ERC20 contract")
-	BadNameValue error = errors.New("Bad decimals of ERC20 contract")
+	BadNameValue     error = errors.New("Bad name of ERC20 contract")
 )
 
 func CreateToken(w3 *web3.Web3, address string) (*ERC20, error) {
@@ -42,9 +54,9 @@ func CreateToken(w3 *web3.Web3, address string) (*ERC20, error) {
 	if err != nil {
 		return nil, err
 	}
-	var name *string
-	if name, success = nameRaw.(*string); !success {
+	var name string
+	if name, success = nameRaw.(string); !success {
 		return nil, BadNameValue
 	}
-	return &ERC20{contract: *contract, decimals: *decimals, name: *name}, nil
+	return &ERC20{contract: *contract, decimals: *decimals, name: name}, nil
 }

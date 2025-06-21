@@ -18,11 +18,3 @@ func main() {
 	router.Run()
 }
 
-// import (
-// 	"fmt"
-//
-// 	"github.com/stryukovsky/go-backend-learn/trade"
-// )
-// func main() {
-// 	fmt.Println(trade.PerfromDeal(&trade.Deal{InputToken: "0xdac17f958d2ee523a2206206994597c13d831ec7", InputAmount: "10", OutputToken: "abc"}))
-// }
