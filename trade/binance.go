@@ -56,13 +56,13 @@ func CreateDeal(transfer ERC20Transfer) (*Deal, error) {
 	}
 
 	volumeToken := big.NewRat(1, 1)
-	volumeToken = volumeToken.SetFrac(&transfer.Amount, new(big.Int).Exp(big.NewInt(10), &transfer.Decimals, nil))
+	volumeToken = volumeToken.SetFrac(transfer.Amount.Int, new(big.Int).Exp(big.NewInt(10), transfer.Decimals.Int, nil))
 
 	volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
 	return &Deal{
-		Price:              *closePrice,
-		VolumeUSD:          *volumeUSD,
-		VolumeTokens:       *volumeToken,
+		Price:              DBNumeric{closePrice},
+		VolumeUSD:          DBNumeric{volumeUSD},
+		VolumeTokens:       DBNumeric{volumeToken},
 		BlockchainTransfer: transfer,
 	}, nil
 }

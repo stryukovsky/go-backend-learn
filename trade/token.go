@@ -39,8 +39,13 @@ func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
 
 var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-func (token *ERC20) ListTransfers() ([]ERC20Transfer, error) {
-	fliter := &types.Fliter{Address: token.Contract.Address(), Topics: []string{TransferTopic}}
+func (token *ERC20) ListTransfers(fromBlock *big.Int, toBlock *big.Int) ([]ERC20Transfer, error) {
+	fromBlockHex := common.BigToHash(fromBlock).Hex()
+	toBlockHex := common.BigToHash(toBlock).Hex()
+	fliter := &types.Fliter{Address: token.Contract.Address(),
+		FromBlock: fromBlockHex,
+		ToBlock:   toBlockHex,
+		Topics:    []string{TransferTopic}}
 	logs, err := token.W3.Eth.GetLogs(fliter)
 	if err != nil {
 		return nil, err
@@ -62,12 +67,13 @@ func (token *ERC20) ListTransfers() ([]ERC20Transfer, error) {
 		transfer := ERC20Transfer{
 			Sender:       from.Hex(),
 			Recipient:    to.Hex(),
-			Amount:       *amount,
+			Amount:       DBInt{amount},
 			TokenAddress: token.Contract.Address().Hex(),
-			Block:        *blockNumber,
+			Block:        DBInt{blockNumber},
 			Timestamp:    timestamp,
-			Decimals:     token.Decimals,
+			Decimals:     DBInt{&token.Decimals},
 			Symbol:       token.Symbol,
+			TxId:         e.TransactionHash.Hex(),
 		}
 		result = append(result, transfer)
 	}
@@ -77,7 +83,7 @@ func (token *ERC20) ListTransfers() ([]ERC20Transfer, error) {
 var (
 	BadDecimalsValue error = errors.New("Bad decimals of ERC20 contract")
 	BadNameValue     error = errors.New("Bad name of ERC20 contract")
-	BadSymbolValue     error = errors.New("Bad symbol of ERC20 contract")
+	BadSymbolValue   error = errors.New("Bad symbol of ERC20 contract")
 )
 
 func CreateToken(w3 *web3.Web3, address string, symbol string) (*ERC20, error) {

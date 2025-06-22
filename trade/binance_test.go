@@ -3,6 +3,7 @@ package trade
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/chenzhijie/go-web3"
@@ -16,7 +17,7 @@ func TestPriceFetching(t *testing.T) {
 
 	token, err := CreateToken(w3, "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "ETH")
 
-	transfers, err := token.ListTransfers()
+	transfers, err := token.ListTransfers(big.NewInt(1), big.NewInt(1))
 	if err != nil {
 		t.Fatal(err)
 	}
