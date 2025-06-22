@@ -14,7 +14,9 @@ func TestEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	events, err := EventTransfer(w3, "0xdac17f958d2ee523a2206206994597c13d831ec7")
+	token, err := CreateToken(w3,  "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT")
+
+	events, err := token.ListTransfers()
 	if err != nil {
 		t.Fatal(err)
 	}

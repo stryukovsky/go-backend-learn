@@ -16,7 +16,6 @@ func TestCreateContract(t *testing.T) {
 	}
 	contract, err := CreateContract(provider, "../abi/ERC20.json", "0xdac17f958d2ee523a2206206994597c13d831ec7")
 	if err != nil {
-		// return nil, err
 		t.Fatal(err)
 	}
 	result, err := contract.Call("decimals")
@@ -31,9 +30,13 @@ func TestERC20Creation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	erc20, err := CreateToken(provider, "0xdac17f958d2ee523a2206206994597c13d831ec7")
+	erc20, err := CreateToken(provider, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT")
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(erc20.BalanceOf("0xbd9b34ccbb8db0fdecb532b1eaf5d46f5b673fe8"))
+  balance, err := erc20.BalanceOf("0xbd9b34ccbb8db0fdecb532b1eaf5d46f5b673fe8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(balance)
 }

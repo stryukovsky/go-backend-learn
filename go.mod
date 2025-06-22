@@ -4,7 +4,9 @@ go 1.24.0
 
 require (
 	github.com/chenzhijie/go-web3 v0.0.0-20241004101201-e508ccdb37f7
+	github.com/ethereum/go-ethereum v1.15.11
 	github.com/gin-gonic/gin v1.10.0
+	github.com/joomcode/errorx v1.2.0
 	github.com/stretchr/testify v1.10.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.0
@@ -23,7 +25,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.1 // indirect
-	github.com/ethereum/go-ethereum v1.15.11 // indirect
 	github.com/ethereum/go-verkle v0.2.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect

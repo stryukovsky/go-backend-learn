@@ -3,15 +3,21 @@ package trade
 import (
 	"errors"
 	"math/big"
+	"time"
 
 	"github.com/chenzhijie/go-web3"
 	"github.com/chenzhijie/go-web3/eth"
+	"github.com/chenzhijie/go-web3/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/joomcode/errorx"
 )
 
 type ERC20 struct {
-	contract eth.Contract
-	decimals big.Int
-	name     string
+	W3       *web3.Web3
+	Contract eth.Contract
+	Decimals big.Int
+	Name     string
+	Symbol   string
 }
 
 var (
@@ -19,9 +25,9 @@ var (
 )
 
 func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
-	rawBalance, err := token.contract.Call("balanceOf", recipient)
+	rawBalance, err := token.Contract.Call("balanceOf", common.HexToAddress(recipient))
 	if err != nil {
-		return nil, err
+		return nil, errorx.Decorate(err, "Cannot call balanceOf")
 	}
 	var balance *big.Int
 	var success bool
@@ -31,12 +37,50 @@ func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
 	return balance, nil
 }
 
+var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+func (token *ERC20) ListTransfers() ([]ERC20Transfer, error) {
+	fliter := &types.Fliter{Address: token.Contract.Address(), Topics: []string{TransferTopic}}
+	logs, err := token.W3.Eth.GetLogs(fliter)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ERC20Transfer, 0, len(logs))
+	for _, e := range logs {
+		if len(e.Topics) != 3 {
+			continue
+		}
+		from := common.HexToAddress(e.Topics[1])
+		to := common.HexToAddress(e.Topics[1])
+		amount := common.HexToHash(e.Data).Big()
+		blockNumber := common.HexToHash(e.BlockNumber).Big()
+		blockHeader, err := token.W3.Eth.GetBlockHeaderByNumber(blockNumber, false)
+		if err != nil {
+			return nil, err
+		}
+		timestamp := time.Unix(int64(blockHeader.Time), 0)
+		transfer := ERC20Transfer{
+			Sender:       from.Hex(),
+			Recipient:    to.Hex(),
+			Amount:       *amount,
+			TokenAddress: token.Contract.Address().Hex(),
+			Block:        *blockNumber,
+			Timestamp:    timestamp,
+			Decimals:     token.Decimals,
+			Symbol:       token.Symbol,
+		}
+		result = append(result, transfer)
+	}
+	return result, nil
+}
+
 var (
 	BadDecimalsValue error = errors.New("Bad decimals of ERC20 contract")
 	BadNameValue     error = errors.New("Bad name of ERC20 contract")
+	BadSymbolValue     error = errors.New("Bad symbol of ERC20 contract")
 )
 
-func CreateToken(w3 *web3.Web3, address string) (*ERC20, error) {
+func CreateToken(w3 *web3.Web3, address string, symbol string) (*ERC20, error) {
 	contract, err := CreateContract(w3, "../abi/ERC20.json", address)
 	if err != nil {
 		return nil, err
@@ -58,5 +102,5 @@ func CreateToken(w3 *web3.Web3, address string) (*ERC20, error) {
 	if name, success = nameRaw.(string); !success {
 		return nil, BadNameValue
 	}
-	return &ERC20{contract: *contract, decimals: *decimals, name: name}, nil
+	return &ERC20{W3: w3, Contract: *contract, Decimals: *decimals, Name: name, Symbol: symbol}, nil
 }
