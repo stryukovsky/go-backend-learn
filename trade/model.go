@@ -126,6 +126,7 @@ type Worker struct {
 
 type Token struct {
 	gorm.Model
-	Symbol  string
-	Address string
+	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
+	Symbol  string `json:"symbol" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
+	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
 }

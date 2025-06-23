@@ -86,8 +86,8 @@ var (
 	BadSymbolValue   error = errors.New("Bad symbol of ERC20 contract")
 )
 
-func CreateToken(w3 *web3.Web3, address string, symbol string) (*ERC20, error) {
-	contract, err := CreateContract(w3, "../abi/ERC20.json", address)
+func CreateERC20(w3 *web3.Web3, address string, symbol string) (*ERC20, error) {
+	contract, err := CreateContract(w3, "abi/ERC20.json", address)
 	if err != nil {
 		return nil, err
 	}

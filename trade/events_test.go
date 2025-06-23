@@ -15,7 +15,7 @@ func TestEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	token, err := CreateToken(w3, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT")
+	token, err := CreateERC20(w3, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT")
 
 	events, err := token.ListTransfers(big.NewInt(1), big.NewInt(2))
 	if err != nil {

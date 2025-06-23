@@ -30,7 +30,7 @@ func TestERC20Creation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	erc20, err := CreateToken(provider, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT")
+	erc20, err := CreateERC20(provider, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT")
 	if err != nil {
 		t.Fatal(err)
 	}
