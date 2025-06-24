@@ -2,8 +2,6 @@ package trade
 
 import (
 	"fmt"
-	"math"
-	"math/big"
 	"strconv"
 
 	"log/slog"
@@ -49,12 +47,8 @@ func Cycle(db *gorm.DB, id uint) {
 		tokens = append(tokens, *erc20)
 	}
 
-	startFromBlock := config.LastBlock.Int
-	endInBlock := new(big.Int).Add(startFromBlock, config.BlocksInterval.Int)
-	if endInBlock.Cmp(big.NewInt(int64(currentBlockchainBlock))) > 0 {
-		endInBlock = currentBlockchainBlock
-		
-	}
+	startFromBlock := config.LastBlock
+	endInBlock := min(startFromBlock + config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
 	for _, token := range tokens {
 		transfers, err := token.ListTransfers(startFromBlock, endInBlock)
@@ -74,7 +68,7 @@ func Cycle(db *gorm.DB, id uint) {
 		}
 	}
 	slog.Info(fmt.Sprintf("Worker last block updated to %d", endInBlock))
-	config.LastBlock = DBInt{endInBlock}
+	config.LastBlock = endInBlock
 	db.Save(config)
 
 }

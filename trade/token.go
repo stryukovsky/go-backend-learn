@@ -2,6 +2,8 @@ package trade
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -39,9 +41,9 @@ func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
 
 var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-func (token *ERC20) ListTransfers(fromBlock *big.Int, toBlock *big.Int) ([]ERC20Transfer, error) {
-	fromBlockHex := common.BigToHash(fromBlock).Hex()
-	toBlockHex := common.BigToHash(toBlock).Hex()
+func (token *ERC20) ListTransfers(fromBlock uint64, toBlock uint64) ([]ERC20Transfer, error) {
+	fromBlockHex := fmt.Sprintf("0x%x", fromBlock)
+	toBlockHex := fmt.Sprintf("0x%x", toBlock)
 	fliter := &types.Fliter{Address: token.Contract.Address(),
 		FromBlock: fromBlockHex,
 		ToBlock:   toBlockHex,
@@ -50,6 +52,7 @@ func (token *ERC20) ListTransfers(fromBlock *big.Int, toBlock *big.Int) ([]ERC20
 	if err != nil {
 		return nil, err
 	}
+	slog.Info(fmt.Sprintf("[%s] Found %d events between %d and %d blocks", token.Symbol, len(logs), fromBlock, toBlock))
 	result := make([]ERC20Transfer, 0, len(logs))
 	for _, e := range logs {
 		if len(e.Topics) != 3 {

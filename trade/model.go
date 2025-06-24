@@ -120,8 +120,8 @@ type Worker struct {
 	gorm.Model
 	BlockchainUrl  string  `json:"blockchainUrl" binding:"required"`
 	Tokens         []Token `json:"tokens" binding:"required" gorm:"many2many:worker_tokens;"`
-	LastBlock      DBInt   `json:"lastBlock" binding:"required"`
-	BlocksInterval DBInt   `json:"blocksInterval" binding:"required"`
+	LastBlock      uint64   `json:"lastBlock" binding:"required"`
+	BlocksInterval uint64   `json:"blocksInterval" binding:"required"`
 }
 
 type Token struct {
