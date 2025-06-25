@@ -2,13 +2,16 @@ package trade
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/url"
-	"strconv"
+	"time"
 
-	"github.com/joomcode/errorx"
+	"github.com/redis/go-redis/v9"
 )
 
 var BinanceAddress string = "https://api.binance.com"
@@ -16,20 +19,25 @@ var QuoteEndpoint = "/api/v3/klines"
 
 func GetQuoteId(tokenTicker string, baseTicker string) string {
 	return tokenTicker + baseTicker
-
 }
 
-func CreateDeal(transfer ERC20Transfer) (*Deal, error) {
+var (
+	BinanceFetchFailed error = errors.New("Response received, but it was not 200 OK")
+	MalformedPrice     error = errors.New("Malformed price string value")
+)
+
+func GetClosePrice(symbol string, instant *time.Time) (*big.Rat, error) {
 	params := url.Values{}
-	params.Add("symbol", GetQuoteId(transfer.Symbol, "USDT"))
+	params.Add("symbol", GetQuoteId(symbol, "USDT"))
 	params.Add("interval", "1m")
-	params.Add("startTime", strconv.FormatInt(transfer.Timestamp.Unix(), 10))
+	params.Add("startTime", fmt.Sprintf("%d", instant.UnixMilli()))
 	params.Add("limit", "1")
-	baseUrl, err := url.Parse(BinanceAddress + QuoteEndpoint + "?" + params.Encode())
+	url, err := url.Parse(BinanceAddress + QuoteEndpoint + "?" + params.Encode())
 	if err != nil {
 		return nil, err
 	}
-	response, err := http.Get(baseUrl.String())
+	urlString := url.String()
+	response, err := http.Get(urlString)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +49,9 @@ func CreateDeal(transfer ERC20Transfer) (*Deal, error) {
 	}
 
 	if response.StatusCode != http.StatusOK {
-		return nil, errorx.IllegalState.New("Cannot fetch data from binance ")
+		slog.Warn(fmt.Sprintf("Cannot fetch quote from binance: %d %s", response.StatusCode, string(body)))
+		slog.Warn(fmt.Sprintf("Request was GET %s", urlString))
+		return nil, BinanceFetchFailed
 	}
 
 	var quote [][]any
@@ -52,7 +62,15 @@ func CreateDeal(transfer ERC20Transfer) (*Deal, error) {
 	closePrice := big.NewRat(1, 1)
 	closePrice, success := closePrice.SetString(quote[0][4].(string))
 	if !success {
-		return nil, errorx.IllegalState.New("Bad close price for quote ")
+		return nil, MalformedPrice
+	}
+	return closePrice, nil
+}
+
+func CreateDeal(rdb *redis.Client, transfer ERC20Transfer) (*Deal, error) {
+	closePrice, err := GetCachedSymbolPriceAtTime(rdb, transfer.Symbol, &transfer.Timestamp)
+	if err != nil {
+		return nil, err
 	}
 
 	volumeToken := big.NewRat(1, 1)

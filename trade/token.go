@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"time"
 
 	"github.com/chenzhijie/go-web3"
 	"github.com/chenzhijie/go-web3/eth"
 	"github.com/chenzhijie/go-web3/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/joomcode/errorx"
+	"github.com/redis/go-redis/v9"
 )
 
 type ERC20 struct {
@@ -41,7 +41,7 @@ func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
 
 var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-func (token *ERC20) ListTransfers(fromBlock uint64, toBlock uint64) ([]ERC20Transfer, error) {
+func (token *ERC20) ListTransfers(fromBlock uint64, toBlock uint64, cache *redis.Client) ([]ERC20Transfer, error) {
 	fromBlockHex := fmt.Sprintf("0x%x", fromBlock)
 	toBlockHex := fmt.Sprintf("0x%x", toBlock)
 	fliter := &types.Fliter{Address: token.Contract.Address(),
@@ -62,18 +62,17 @@ func (token *ERC20) ListTransfers(fromBlock uint64, toBlock uint64) ([]ERC20Tran
 		to := common.HexToAddress(e.Topics[1])
 		amount := common.HexToHash(e.Data).Big()
 		blockNumber := common.HexToHash(e.BlockNumber).Big()
-		blockHeader, err := token.W3.Eth.GetBlockHeaderByNumber(blockNumber, false)
+		timestamp, err := GetCachedBlockTimestamp(token.W3, cache, blockNumber.Uint64())
 		if err != nil {
 			return nil, err
 		}
-		timestamp := time.Unix(int64(blockHeader.Time), 0)
 		transfer := ERC20Transfer{
 			Sender:       from.Hex(),
 			Recipient:    to.Hex(),
 			Amount:       DBInt{amount},
 			TokenAddress: token.Contract.Address().Hex(),
 			Block:        DBInt{blockNumber},
-			Timestamp:    timestamp,
+			Timestamp:    *timestamp,
 			Decimals:     DBInt{&token.Decimals},
 			Symbol:       token.Symbol,
 			TxId:         e.TransactionHash.Hex(),

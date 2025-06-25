@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/chenzhijie/go-web3"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -23,6 +24,12 @@ func Cycle(db *gorm.DB, id uint) {
 		slog.Warn(fmt.Sprintf("Cannot connect to blockchain: %e", err))
 		return
 	}
+
+	cache := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "redis",
+		DB:       0,
+	})
 
 	currentBlockchainBlock, err := web3.Eth.GetBlockNumber()
 	if err != nil {
@@ -48,19 +55,19 @@ func Cycle(db *gorm.DB, id uint) {
 	}
 
 	startFromBlock := config.LastBlock
-	endInBlock := min(startFromBlock + config.BlocksInterval, currentBlockchainBlock)
+	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
 	for _, token := range tokens {
-		transfers, err := token.ListTransfers(startFromBlock, endInBlock)
+		transfers, err := token.ListTransfers(startFromBlock, endInBlock, cache)
 		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %e", token.Symbol, err))
+			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
 			continue
 		}
 		slog.Info(fmt.Sprintf("[%s] Found %d transfers", token.Symbol, len(transfers)))
 		for _, transfer := range transfers {
-			deal, err := CreateDeal(transfer)
+			deal, err := CreateDeal(cache, transfer)
 			if err != nil {
-				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %e", token.Symbol, transfer.TxId, err))
+				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %s", token.Symbol, transfer.TxId, err.Error()))
 			} else {
 				slog.Info(fmt.Sprintf("[%s] Found deal with volume $ %s", token.Symbol, deal.VolumeUSD.FloatString(5)))
 				db.Save(deal)

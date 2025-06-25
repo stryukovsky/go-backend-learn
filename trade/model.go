@@ -95,11 +95,11 @@ func (DBInt) GormDataType() string {
 
 type Deal struct {
 	gorm.Model
-	DealId             string        `json:"dealId" gorm:"uniqueIndex" binding:"required"`
 	Price              DBNumeric     `json:"price" binding:"required"`
 	VolumeTokens       DBNumeric     `json:"volumeTokens" binding:"required"`
 	VolumeUSD          DBNumeric     `json:"volumeUSD" binding:"required"`
-	BlockchainTransfer ERC20Transfer `json:"blockchainTransfer" binding:"required" gorm:"foreignKey:TxId;references:DealId"`
+	BlockchainTransferID int
+	BlockchainTransfer ERC20Transfer `json:"blockchainTransfer" binding:"required"`
 }
 
 type ERC20Transfer struct {

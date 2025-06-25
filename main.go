@@ -3,7 +3,6 @@ package main
 import (
 
 	// "github.com/gin-gonic/gin"
-	// "math/big"
 
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"gorm.io/driver/postgres"
@@ -17,13 +16,13 @@ func main() {
 		panic("Cannot start db connection" + err.Error())
 	}
 	db.AutoMigrate(&trade.Deal{}, &trade.ERC20Transfer{}, &trade.Worker{})
-	// worker := trade.Worker{
-	// 	BlockchainUrl:  "http://localhost:8545",
-	// 	LastBlock:      trade.DBInt{Int: big.NewInt(22761436)},
-	// 	BlocksInterval: trade.DBInt{Int: big.NewInt(100)},
-	// }
-	// db.Create(&worker)
-	// db.Model(&worker).Association("Tokens").Append([]trade.Token{{ChainId: "1", Address: "0xdac17f958d2ee523a2206206994597c13d831ec7", Symbol: "USDT"}})
-	trade.Cycle(db, 6)
+	worker := trade.Worker{
+		BlockchainUrl:  "http://localhost:8545",
+		LastBlock:      22761436,
+		BlocksInterval: 100,
+	}
+	db.Create(&worker)
+	db.Model(&worker).Association("Tokens").Append([]trade.Token{{ChainId: "1", Address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", Symbol: "ETH"}})
+	trade.Cycle(db, 1)
 	// router.Run()
 }
