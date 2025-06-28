@@ -25,6 +25,12 @@ func Cycle(db *gorm.DB, id uint) {
 		return
 	}
 
+	chainId, err := web3.Eth.ChainID()
+	if err != nil {
+		slog.Warn("Cannot fetch chain id")
+		return 
+	}
+
 	cache := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "redis",
@@ -38,7 +44,7 @@ func Cycle(db *gorm.DB, id uint) {
 	}
 
 	var tokensFromDB []Token
-	err = db.Model(&config).Association("Tokens").Find(&tokensFromDB)
+	err = db.Find(&tokensFromDB, &Token{ChainId: chainId.String()}).Error
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot get tokens of config: %e", err))
 		return

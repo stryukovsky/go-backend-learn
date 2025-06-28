@@ -2,11 +2,6 @@ package trade
 
 import (
 	"os"
-
-	// "github.com/IBM/fp-go/either"
-	// E "github.com/IBM/fp-go/either"
-	// F "github.com/IBM/fp-go/function"
-
 	"github.com/chenzhijie/go-web3"
 	"github.com/chenzhijie/go-web3/eth"
 )
