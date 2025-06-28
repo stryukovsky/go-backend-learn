@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 
 	"github.com/chenzhijie/go-web3"
 	"github.com/chenzhijie/go-web3/eth"
@@ -41,45 +42,78 @@ func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
 
 var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-func (token *ERC20) ListTransfers(fromBlock uint64, toBlock uint64, cache *redis.Client) ([]ERC20Transfer, error) {
-	fromBlockHex := fmt.Sprintf("0x%x", fromBlock)
-	toBlockHex := fmt.Sprintf("0x%x", toBlock)
-	fliter := &types.Fliter{Address: token.Contract.Address(),
-		FromBlock: fromBlockHex,
-		ToBlock:   toBlockHex,
-		Topics:    []string{TransferTopic}}
+func (token *ERC20) ListTransfers(
+	fliter *types.Fliter,
+	cache *redis.Client,
+	filterTransfer func(string, string, *big.Int) bool,
+) ([]ERC20Transfer, error) {
 	logs, err := token.W3.Eth.GetLogs(fliter)
 	if err != nil {
 		return nil, err
 	}
-	slog.Info(fmt.Sprintf("[%s] Found %d events between %d and %d blocks", token.Symbol, len(logs), fromBlock, toBlock))
+	slog.Info(fmt.Sprintf("[%s] Found %d events. Filter them to find transfers of tracked wallets", token.Symbol, len(logs)))
 	result := make([]ERC20Transfer, 0, len(logs))
 	for _, e := range logs {
 		if len(e.Topics) != 3 {
 			continue
 		}
-		from := common.HexToAddress(e.Topics[1])
-		to := common.HexToAddress(e.Topics[1])
+		from := common.HexToAddress(e.Topics[1]).Hex()
+		to := common.HexToAddress(e.Topics[2]).Hex()
 		amount := common.HexToHash(e.Data).Big()
-		blockNumber := common.HexToHash(e.BlockNumber).Big()
-		timestamp, err := GetCachedBlockTimestamp(token.W3, cache, blockNumber.Uint64())
-		if err != nil {
-			return nil, err
+		if filterTransfer(from, to, amount) {
+
+			blockNumber := common.HexToHash(e.BlockNumber).Big()
+			timestamp, err := GetCachedBlockTimestamp(token.W3, cache, blockNumber.Uint64())
+			if err != nil {
+				return nil, err
+			}
+			transfer := ERC20Transfer{
+				Sender:       from,
+				Recipient:    to,
+				Amount:       DBInt{amount},
+				TokenAddress: token.Contract.Address().Hex(),
+				Block:        DBInt{blockNumber},
+				Timestamp:    *timestamp,
+				Decimals:     DBInt{&token.Decimals},
+				Symbol:       token.Symbol,
+				TxId:         e.TransactionHash.Hex(),
+			}
+			result = append(result, transfer)
 		}
-		transfer := ERC20Transfer{
-			Sender:       from.Hex(),
-			Recipient:    to.Hex(),
-			Amount:       DBInt{amount},
-			TokenAddress: token.Contract.Address().Hex(),
-			Block:        DBInt{blockNumber},
-			Timestamp:    *timestamp,
-			Decimals:     DBInt{&token.Decimals},
-			Symbol:       token.Symbol,
-			TxId:         e.TransactionHash.Hex(),
-		}
-		result = append(result, transfer)
 	}
 	return result, nil
+}
+
+func (token *ERC20) ListTransfersOfParticipants(
+	participants []string,
+	fromBlock uint64,
+	toBlock uint64,
+	cache *redis.Client,
+) ([]ERC20Transfer, error) {
+	fromBlockHex := fmt.Sprintf("0x%x", fromBlock)
+	toBlockHex := fmt.Sprintf("0x%x", toBlock)
+	ethereumFilter := &types.Fliter{Address: token.Contract.Address(),
+		FromBlock: fromBlockHex,
+		ToBlock:   toBlockHex,
+		Topics:    []string{TransferTopic,}}
+	slog.Info(fmt.Sprintf("[%s] Searching events between %d and %d blocks where participated one of following addresses", token.Symbol, fromBlock, toBlock))
+	for _, participant := range participants {
+		slog.Info(fmt.Sprintf("[%s] %s", token.Symbol, participant))
+	}
+
+	filter := func(from string, to string, amount *big.Int) bool {
+		for _, participant := range participants {
+			if strings.ToLower(participant) == strings.ToLower(from) {
+				return true
+			}
+			if strings.ToLower(participant) == strings.ToLower(to) {
+				return true
+			}
+		}
+		return false
+	}
+
+		return token.ListTransfers(ethereumFilter, cache, filter)
 }
 
 var (

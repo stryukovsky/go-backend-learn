@@ -3,6 +3,7 @@ package trade
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"log/slog"
 
@@ -28,7 +29,7 @@ func Cycle(db *gorm.DB, id uint) {
 	chainId, err := web3.Eth.ChainID()
 	if err != nil {
 		slog.Warn("Cannot fetch chain id")
-		return 
+		return
 	}
 
 	cache := redis.NewClient(&redis.Options{
@@ -37,16 +38,28 @@ func Cycle(db *gorm.DB, id uint) {
 		DB:       0,
 	})
 
+	var trackedWallets []TrackedWallet
+	err = db.Find(&trackedWallets, &TrackedWallet{ChainId: chainId.String()}).Error
+	if err != nil {
+		slog.Warn("Failed to get tracked wallets")
+		return
+	}
+
+	var participants []string
+	for _, wallet := range trackedWallets {
+		participants = append(participants, strings.ToLower(wallet.Address))
+	}
+
 	currentBlockchainBlock, err := web3.Eth.GetBlockNumber()
 	if err != nil {
-		slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %e", err))
+		slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %s", err.Error()))
 		return
 	}
 
 	var tokensFromDB []Token
 	err = db.Find(&tokensFromDB, &Token{ChainId: chainId.String()}).Error
 	if err != nil {
-		slog.Warn(fmt.Sprintf("Cannot get tokens of config: %e", err))
+		slog.Warn(fmt.Sprintf("Cannot get tokens of config: %s", err.Error()))
 		return
 	}
 
@@ -64,12 +77,12 @@ func Cycle(db *gorm.DB, id uint) {
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
 	for _, token := range tokens {
-		transfers, err := token.ListTransfers(startFromBlock, endInBlock, cache)
+		transfers, err := token.ListTransfersOfParticipants(participants, startFromBlock, endInBlock, cache)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
 			continue
 		}
-		slog.Info(fmt.Sprintf("[%s] Found %d transfers", token.Symbol, len(transfers)))
+		slog.Info(fmt.Sprintf("[%s] Found %d transfers where tracked wallets participated", token.Symbol, len(transfers)))
 		for _, transfer := range transfers {
 			deal, err := CreateDeal(cache, transfer)
 			if err != nil {

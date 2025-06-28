@@ -95,11 +95,11 @@ func (DBInt) GormDataType() string {
 
 type Deal struct {
 	gorm.Model
-	Price              DBNumeric     `json:"price" binding:"required"`
-	VolumeTokens       DBNumeric     `json:"volumeTokens" binding:"required"`
-	VolumeUSD          DBNumeric     `json:"volumeUSD" binding:"required"`
+	Price                DBNumeric `json:"price" binding:"required"`
+	VolumeTokens         DBNumeric `json:"volumeTokens" binding:"required"`
+	VolumeUSD            DBNumeric `json:"volumeUSD" binding:"required"`
 	BlockchainTransferID int
-	BlockchainTransfer ERC20Transfer `json:"blockchainTransfer" binding:"required"`
+	BlockchainTransfer   ERC20Transfer `json:"blockchainTransfer" binding:"required"`
 }
 
 type ERC20Transfer struct {
@@ -118,9 +118,9 @@ type ERC20Transfer struct {
 
 type Worker struct {
 	gorm.Model
-	BlockchainUrl  string  `json:"blockchainUrl" binding:"required"`
-	LastBlock      uint64   `json:"lastBlock" binding:"required"`
-	BlocksInterval uint64   `json:"blocksInterval" binding:"required"`
+	BlockchainUrl  string `json:"blockchainUrl" binding:"required"`
+	LastBlock      uint64 `json:"lastBlock" binding:"required"`
+	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
 }
 
 type Token struct {
@@ -128,4 +128,10 @@ type Token struct {
 	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
 	Symbol  string `json:"symbol" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
 	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
+}
+
+type TrackedWallet struct {
+	gorm.Model
+	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
+	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
 }

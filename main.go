@@ -15,14 +15,16 @@ func main() {
 	if err != nil {
 		panic("Cannot start db connection" + err.Error())
 	}
-	db.AutoMigrate(&trade.Deal{}, &trade.ERC20Transfer{}, &trade.Worker{})
-	worker := trade.Worker{
-		BlockchainUrl:  "http://localhost:8545",
-		LastBlock:      22761436,
-		BlocksInterval: 100,
-	}
-	db.Create(&worker)
-	db.Model(&worker).Association("Tokens").Append([]trade.Token{{ChainId: "1", Address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", Symbol: "ETH"}})
+	db.AutoMigrate(&trade.Deal{}, &trade.ERC20Transfer{}, &trade.Worker{}, &trade.Token{}, &trade.TrackedWallet{})
+	// worker := trade.Worker{
+	// 	BlockchainUrl:  "http://localhost:8545",
+	// 	LastBlock:      22761436,
+	// 	BlocksInterval: 100,
+	// }
+	// db.Create(&worker)
+	// db.Create(&trade.Token{ChainId: "1", Address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", Symbol: "ETH"})
+	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"})
+
 	trade.Cycle(db, 1)
 	// router.Run()
 }
