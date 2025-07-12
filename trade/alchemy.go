@@ -1,22 +1,102 @@
 package trade
 
 import (
-	"context"
-	"net"
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
 
-	"github.com/sourcegraph/jsonrpc2"
+	"github.com/chenzhijie/go-web3"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/redis/go-redis/v9"
 )
 
-func GetTransfersForAccount(worker Worker, wallet TrackedWallet) ([]ERC20Transfer, error) {
+type AssetTransferParams struct {
+	FromBlock   string `json:"fromBlock"`
+	ToBlock     string `json:"toBlock"`
+	FromAddress string `json:"fromAddress"`
+	ToAddress   string `json:"toAddress"`
+}
 
-	conn, err := net.Dial("tcp", worker.AlchemyApiUrl)
+type RawContract struct {
+	Value   string `json:"value"`
+	Address string `json:"address"`
+	Decimal string `json:"decimal"`
+}
+
+type AssetTransfer struct {
+	Category    string       `json:"category"`
+	Hash        string       `json:"hash"`
+	BlockNum    string       `json:"blockNum"`
+	From        string       `json:"from"`
+	To          string       `json:"to"`
+	Value       float64      `json:"value"`
+	RawContract *RawContract `json:"rawContract,omitempty"`
+}
+
+type Response struct {
+	PageKey   string          `json:"pageKey"`
+	Transfers []AssetTransfer `json:"transfers"`
+}
+
+type Request struct {
+	JsonRPC string   `json:"jsonrpc"`
+	Method  string   `json:"method"`
+	Params  []string `json:"params"`
+	Id      string   `json:"id"`
+}
+
+var EmptyArr []ERC20Transfer = make([]ERC20Transfer, 0)
+
+func GetTransfersForAccount(w3 *web3.Web3, cache *redis.Client, worker Worker, wallet TrackedWallet) ([]ERC20Transfer, error) {
+
+	requestBody := Request{}
+
+	requestBodyJSON, err := json.Marshal(requestBody)
 	if err != nil {
-		return []ERC20Transfer{}, err
+		return EmptyArr, err
+	}
+	req, err := http.NewRequest(http.MethodPost, worker.AlchemyApiUrl, bytes.NewBuffer(requestBodyJSON))
+	if err != nil {
+		return EmptyArr, err
 	}
 
-	client := jsonrpc2.NewConn(
-		context.Background(), jsonrpc2.NewBufferedStream(conn, jsonrpc2.VSCodeObjectCodec{}), jsonrpc2.Handler(func(context.Context, *jsonrpc2.Conn, *jsonrpc2.Request) {
+	responseRaw, err := io.ReadAll(req.Body)
+	if err != nil {
+		return EmptyArr, err
+	}
+	response := Response{}
+	err = json.Unmarshal(responseRaw, &response)
+	if err != nil {
+		return EmptyArr, err
+	}
 
-		}))
+	result := make([]ERC20Transfer, len(response.Transfers))
+	for i, transfer := range response.Transfers {
+		if transfer.RawContract == nil {
+			continue
+		}
+		blockNumber := common.HexToHash(transfer.BlockNum).Big()
+		timestamp, err := GetCachedBlockTimestamp(w3, cache, blockNumber.Uint64())
+		if err != nil {
+			continue
+		}
+		result[i] = ERC20Transfer{
+			TokenAddress: transfer.RawContract.Address,
+			Name:         "unknown",
+			Symbol:       "unknown",
+			Decimals:     DBInt{common.HexToHash(transfer.RawContract.Decimal).Big()},
+
+			Sender:    transfer.From,
+			Recipient: transfer.To,
+
+			Amount:    DBInt{common.HexToHash(transfer.RawContract.Value).Big()},
+			Block:     DBInt{common.HexToHash(transfer.BlockNum).Big()},
+			Timestamp: *timestamp,
+			TxId:      transfer.Hash,
+		}
+
+	}
+	return result, nil
 
 }

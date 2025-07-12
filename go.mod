@@ -8,7 +8,6 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/joomcode/errorx v1.2.0
 	github.com/redis/go-redis/v9 v9.11.0
-	github.com/sourcegraph/jsonrpc2 v0.2.1
 	github.com/stretchr/testify v1.10.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.0
