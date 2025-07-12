@@ -46,7 +46,6 @@ func GetCachedBlockTimestamp(w3 *web3.Web3, rdb *redis.Client, block uint64) (*t
 	slog.Info(fmt.Sprintf("Block %d is already cached with unix timestamp %s", block, timestampString))
 	timestamp, err := strconv.ParseInt(timestampString, 10, 64)
 	if err != nil {
-
 		return nil, err
 	}
 	result := time.Unix(timestamp, 0)

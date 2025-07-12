@@ -119,6 +119,7 @@ type ERC20Transfer struct {
 type Worker struct {
 	gorm.Model
 	BlockchainUrl  string `json:"blockchainUrl" binding:"required"`
+	AlchemyApiUrl  string `json:"alchemyApiUrl" binding:"required"`
 	LastBlock      uint64 `json:"lastBlock" binding:"required"`
 	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
 }
