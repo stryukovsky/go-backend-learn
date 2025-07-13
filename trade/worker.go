@@ -12,6 +12,14 @@ import (
 	"gorm.io/gorm"
 )
 
+func FetchTransfersFromNode() {
+
+}
+
+func FetchTransfersFromAlchemy() {
+
+}
+
 func Cycle(db *gorm.DB, id uint) {
 	var config Worker
 	result := db.First(&config, id)
@@ -74,6 +82,12 @@ func Cycle(db *gorm.DB, id uint) {
 	}
 
 	startFromBlock := config.LastBlock
+	if currentBlockchainBlock-startFromBlock > 10*config.BlocksInterval {
+		// TODO: call alchemy
+	} else {
+		// TODO: move next lines into function
+
+	}
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
 	for _, token := range tokens {
@@ -96,5 +110,10 @@ func Cycle(db *gorm.DB, id uint) {
 	slog.Info(fmt.Sprintf("Worker last block updated to %d", endInBlock))
 	config.LastBlock = endInBlock
 	db.Save(config)
+	for _, wallet := range trackedWallets {
+		wallet.LastBlock = endInBlock
+		db.Save(wallet)
+	}
+	slog.Info(fmt.Sprintf("%s wallets was updated having last block %d", len(trackedWallets), endInBlock))
 
 }
