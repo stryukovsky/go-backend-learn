@@ -12,8 +12,42 @@ import (
 	"gorm.io/gorm"
 )
 
-func FetchTransfersFromNode() {
-
+func FetchTransfersFromNode(
+	db *gorm.DB,
+	cache *redis.Client,
+	config *Worker,
+	startFromBlock uint64,
+	currentBlockchainBlock uint64,
+	tokens []ERC20,
+	trackedWallets []TrackedWallet,
+	participants []string) {
+	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
+	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
+	for _, token := range tokens {
+		transfers, err := token.ListTransfersOfParticipants(participants, startFromBlock, endInBlock, cache)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
+			continue
+		}
+		slog.Info(fmt.Sprintf("[%s] Found %d transfers where tracked wallets participated", token.Symbol, len(transfers)))
+		for _, transfer := range transfers {
+			deal, err := CreateDeal(cache, transfer)
+			if err != nil {
+				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %s", token.Symbol, transfer.TxId, err.Error()))
+			} else {
+				slog.Info(fmt.Sprintf("[%s] Found deal with volume $ %s", token.Symbol, deal.VolumeUSD.FloatString(5)))
+				db.Save(deal)
+			}
+		}
+	}
+	slog.Info(fmt.Sprintf("Worker last block updated to %d", endInBlock))
+	config.LastBlock = endInBlock
+	db.Save(config)
+	for _, wallet := range trackedWallets {
+		wallet.LastBlock = endInBlock
+		db.Save(wallet)
+	}
+	slog.Info(fmt.Sprintf("%s wallets was updated having last block %d", len(trackedWallets), endInBlock))
 }
 
 func FetchTransfersFromAlchemy() {
@@ -83,37 +117,11 @@ func Cycle(db *gorm.DB, id uint) {
 
 	startFromBlock := config.LastBlock
 	if currentBlockchainBlock-startFromBlock > 10*config.BlocksInterval {
-		// TODO: call alchemy
+		// FetchTransfersFromNode(db, cache, &config, startFromBlock, currentBlockchainBlock, tokens, trackedWallets, participants)
+		// FetchTransfersFromNode(db, )
 	} else {
 		// TODO: move next lines into function
 
 	}
-	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
-	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
-	for _, token := range tokens {
-		transfers, err := token.ListTransfersOfParticipants(participants, startFromBlock, endInBlock, cache)
-		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
-			continue
-		}
-		slog.Info(fmt.Sprintf("[%s] Found %d transfers where tracked wallets participated", token.Symbol, len(transfers)))
-		for _, transfer := range transfers {
-			deal, err := CreateDeal(cache, transfer)
-			if err != nil {
-				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %s", token.Symbol, transfer.TxId, err.Error()))
-			} else {
-				slog.Info(fmt.Sprintf("[%s] Found deal with volume $ %s", token.Symbol, deal.VolumeUSD.FloatString(5)))
-				db.Save(deal)
-			}
-		}
-	}
-	slog.Info(fmt.Sprintf("Worker last block updated to %d", endInBlock))
-	config.LastBlock = endInBlock
-	db.Save(config)
-	for _, wallet := range trackedWallets {
-		wallet.LastBlock = endInBlock
-		db.Save(wallet)
-	}
-	slog.Info(fmt.Sprintf("%s wallets was updated having last block %d", len(trackedWallets), endInBlock))
 
 }
