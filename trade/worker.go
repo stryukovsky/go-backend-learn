@@ -116,7 +116,8 @@ func Cycle(db *gorm.DB, id uint) {
 	}
 
 	// if wallet is too out-dated, then use alchemy instead of node
-	walletsToBeUpdatedFromAlchemy = make([]TrackedWallet, len(trackedWallets))
+	walletsToBeUpdatedFromAlchemy := make([]TrackedWallet, len(trackedWallets))
+	criteria := 
 	startFromBlock := config.LastBlock
 	if currentBlockchainBlock-startFromBlock > 10*config.BlocksInterval {
 		FetchTransfersFromAlchemy()
