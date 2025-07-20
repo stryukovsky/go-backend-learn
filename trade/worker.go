@@ -50,8 +50,8 @@ func FetchTransfersFromNode(
 	slog.Info(fmt.Sprintf("%s wallets was updated having last block %d", len(trackedWallets), endInBlock))
 }
 
-func FetchTransfersFromAlchemy() {
-
+func FetchTransfersFromAlchemy(w3 *web3.Web3, cache *redis.Client, worker Worker, wallet TrackedWallet) {
+	AlchemyGetTransfersForAccount(w3, cache, worker, wallet)
 }
 
 func Cycle(db *gorm.DB, id uint) {
@@ -115,13 +115,13 @@ func Cycle(db *gorm.DB, id uint) {
 		tokens = append(tokens, *erc20)
 	}
 
+	// if wallet is too out-dated, then use alchemy instead of node
+	walletsToBeUpdatedFromAlchemy = make([]TrackedWallet, len(trackedWallets))
 	startFromBlock := config.LastBlock
 	if currentBlockchainBlock-startFromBlock > 10*config.BlocksInterval {
-		// FetchTransfersFromNode(db, cache, &config, startFromBlock, currentBlockchainBlock, tokens, trackedWallets, participants)
-		// FetchTransfersFromNode(db, )
+		FetchTransfersFromAlchemy()
 	} else {
-		// TODO: move next lines into function
-
+		FetchTransfersFromNode(db, cache, &config, startFromBlock, currentBlockchainBlock, tokens, trackedWallets, participants)
 	}
 
 }

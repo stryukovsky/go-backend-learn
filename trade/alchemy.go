@@ -48,7 +48,7 @@ type Request struct {
 
 var EmptyArr []ERC20Transfer = make([]ERC20Transfer, 0)
 
-func GetTransfersForAccount(w3 *web3.Web3, cache *redis.Client, worker Worker, wallet TrackedWallet) ([]ERC20Transfer, error) {
+func AlchemyGetTransfersForAccount(w3 *web3.Web3, cache *redis.Client, worker Worker, wallet TrackedWallet) ([]ERC20Transfer, error) {
 
 	requestBody := Request{}
 
