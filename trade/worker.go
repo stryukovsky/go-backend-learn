@@ -2,6 +2,7 @@ package trade
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -42,10 +43,6 @@ func FetchTransfersFromNode(
 	}
 }
 
-func FetchTransfersFromAlchemy(w3 *web3.Web3, cache *redis.Client, worker Worker, wallet TrackedWallet) {
-	AlchemyGetTransfersForAccount(w3, cache, worker, wallet)
-}
-
 func Cycle(db *gorm.DB, id uint) {
 	var config Worker
 	result := db.First(&config, id)
@@ -79,11 +76,6 @@ func Cycle(db *gorm.DB, id uint) {
 		return
 	}
 
-	var participants []string
-	for _, wallet := range trackedWallets {
-		participants = append(participants, strings.ToLower(wallet.Address))
-	}
-
 	currentBlockchainBlock, err := web3.Eth.GetBlockNumber()
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %s", err.Error()))
@@ -109,23 +101,42 @@ func Cycle(db *gorm.DB, id uint) {
 
 	// criteria to consider wallet info is outdated (i.e. 100 intervals ago was updated)
 	criteria := 100 * config.BlocksInterval
-	outDatedWallets := make([]TrackedWallet, 0, len(trackedWallets))
+
+	alchemyIsAvailable := strings.TrimSpace(config.AlchemyApiUrl) != ""
+
+	// wallets which are actual enough to fetch transfers from blockchain
+	walletsToFetchFromNode := make([]TrackedWallet, 0, len(trackedWallets))
+	// minimal block number of every wallet
+	var minBlockOfWalletsToFetchFromNode uint64 = math.MaxUint64
 	for _, wallet := range trackedWallets {
 		startFromBlock := wallet.LastBlock
-		if currentBlockchainBlock-startFromBlock > criteria {
-			FetchTransfersFromAlchemy(web3, cache, config, wallet)
-			outDatedWallets = append(outDatedWallets, wallet)
-		} else {
-			FetchTransfersFromNode(db, cache, &config, startFromBlock, currentBlockchainBlock, tokens, trackedWallets, participants)
-			wallet.LastBlock = min(currentBlockchainBlock, startFromBlock+config.BlocksInterval)
+		if currentBlockchainBlock-startFromBlock > criteria && alchemyIsAvailable {
+			transfers, err := AlchemyGetTransfersForAccount(web3, cache, config, wallet)
+			if err != nil {
+				slog.Warn(fmt.Sprintf("Error when interacting with alchemy: %s", err.Error()))
+				continue
+			}
+			db.CreateInBatches(transfers, len(transfers))
+			wallet.LastBlock = currentBlockchainBlock
 			db.Save(wallet)
-			slog.Info(fmt.Sprintf("Wallet %s was updated having last block %d", wallet.Address, wallet.LastBlock))
+		} else {
+			walletsToFetchFromNode = append(walletsToFetchFromNode, wallet)
+			minBlockOfWalletsToFetchFromNode = min(minBlockOfWalletsToFetchFromNode, wallet.LastBlock)
 		}
 	}
-	for _, wallet := range outDatedWallets {
-		wallet.LastBlock = currentBlockchainBlock
-		db.Save(wallet)
-		slog.Info(fmt.Sprintf("Wallet %s was updated having last block %d", wallet.Address, wallet.LastBlock))
+	var participants []string
+	for _, wallet := range walletsToFetchFromNode {
+		slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
+		participants = append(participants, strings.ToLower(wallet.Address))
 	}
-
+	if len(walletsToFetchFromNode) > 0 {
+		FetchTransfersFromNode(db,
+			cache,
+			&config,
+			minBlockOfWalletsToFetchFromNode,
+			currentBlockchainBlock,
+			tokens,
+			trackedWallets,
+			participants)
+	}
 }

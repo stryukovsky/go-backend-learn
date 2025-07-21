@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/chenzhijie/go-web3"
 	"github.com/ethereum/go-ethereum/common"
@@ -42,18 +43,34 @@ type Response struct {
 }
 
 type Request struct {
-	JsonRPC string   `json:"jsonrpc"`
-	Method  string   `json:"method"`
-	Params  []string `json:"params"`
-	Id      string   `json:"id"`
+	JsonRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  []any  `json:"params"`
+	Id      int    `json:"id"`
 }
 
 var EmptyArr []ERC20Transfer = make([]ERC20Transfer, 0)
 
 func AlchemyGetTransfersForAccount(w3 *web3.Web3, cache *redis.Client, worker Worker, wallet TrackedWallet) ([]ERC20Transfer, error) {
+	if strings.TrimSpace(worker.AlchemyApiUrl) == "" {
+		return EmptyArr, fmt.Errorf("Alchemy API URL is not set ")
+
+	}
 	slog.Info(fmt.Sprintf("Out-dated wallet %s", wallet.Address))
 
-	requestBody := Request{}
+	requestBody := Request{
+		JsonRPC: "2.0",
+		Id:      1,
+		Method:  "alchemy_getAssetTransfers",
+		Params: []any{
+			"0x0",
+			"latest",
+			wallet.Address,
+			"",
+			true,
+			[]string{"erc20"},
+		},
+	}
 
 	requestBodyJSON, err := json.Marshal(requestBody)
 	if err != nil {
@@ -73,6 +90,7 @@ func AlchemyGetTransfersForAccount(w3 *web3.Web3, cache *redis.Client, worker Wo
 	if err != nil {
 		return EmptyArr, err
 	}
+	slog.Info(fmt.Sprintf("Found %d transfers via alchemy", len(response.Transfers)))
 
 	result := make([]ERC20Transfer, len(response.Transfers))
 	for i, transfer := range response.Transfers {
