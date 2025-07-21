@@ -40,14 +40,6 @@ func FetchTransfersFromNode(
 			}
 		}
 	}
-	slog.Info(fmt.Sprintf("Worker last block updated to %d", endInBlock))
-	config.LastBlock = endInBlock
-	db.Save(config)
-	for _, wallet := range trackedWallets {
-		wallet.LastBlock = endInBlock
-		db.Save(wallet)
-	}
-	slog.Info(fmt.Sprintf("%s wallets was updated having last block %d", len(trackedWallets), endInBlock))
 }
 
 func FetchTransfersFromAlchemy(w3 *web3.Web3, cache *redis.Client, worker Worker, wallet TrackedWallet) {
@@ -115,14 +107,25 @@ func Cycle(db *gorm.DB, id uint) {
 		tokens = append(tokens, *erc20)
 	}
 
-	// if wallet is too out-dated, then use alchemy instead of node
-	walletsToBeUpdatedFromAlchemy := make([]TrackedWallet, len(trackedWallets))
-	criteria := 
-	startFromBlock := config.LastBlock
-	if currentBlockchainBlock-startFromBlock > 10*config.BlocksInterval {
-		FetchTransfersFromAlchemy()
-	} else {
-		FetchTransfersFromNode(db, cache, &config, startFromBlock, currentBlockchainBlock, tokens, trackedWallets, participants)
+	// criteria to consider wallet info is outdated (i.e. 100 intervals ago was updated)
+	criteria := 100 * config.BlocksInterval
+	outDatedWallets := make([]TrackedWallet, 0, len(trackedWallets))
+	for _, wallet := range trackedWallets {
+		startFromBlock := wallet.LastBlock
+		if currentBlockchainBlock-startFromBlock > criteria {
+			FetchTransfersFromAlchemy(web3, cache, config, wallet)
+			outDatedWallets = append(outDatedWallets, wallet)
+		} else {
+			FetchTransfersFromNode(db, cache, &config, startFromBlock, currentBlockchainBlock, tokens, trackedWallets, participants)
+			wallet.LastBlock = min(currentBlockchainBlock, startFromBlock+config.BlocksInterval)
+			db.Save(wallet)
+			slog.Info(fmt.Sprintf("Wallet %s was updated having last block %d", wallet.Address, wallet.LastBlock))
+		}
+	}
+	for _, wallet := range outDatedWallets {
+		wallet.LastBlock = currentBlockchainBlock
+		db.Save(wallet)
+		slog.Info(fmt.Sprintf("Wallet %s was updated having last block %d", wallet.Address, wallet.LastBlock))
 	}
 
 }
