@@ -4,6 +4,8 @@ import (
 
 	// "github.com/gin-gonic/gin"
 
+	"fmt"
+
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -27,7 +29,11 @@ func main() {
 
 	// trade.Cycle(db, 1)
 	dealsIncome := []trade.Deal{}
-	db.Joins("ERC20Transfer").Find(&dealsIncome)
+	err = db.Joins("ERC20Transfer").Find(&dealsIncome).Error
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(len(dealsIncome))
 
 	// router.Run()
 }
