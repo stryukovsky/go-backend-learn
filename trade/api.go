@@ -1,6 +1,8 @@
 package trade
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +40,20 @@ func ListDeals(ctx *gin.Context, db *gorm.DB) {
 		ctx.JSON(http.StatusOK, items)
 	}
 }
+
+
+
+func BalancesByWallet(ctx *gin.Context, db *gorm.DB) {
+  walletAddress :=  ctx.Param("wallet")
+	slog.Info(fmt.Sprintf("Find balances across all blockchains of %s", walletAddress))
+
+	dealsIncome := []Deal{}
+	db.Joins("ERC20Transfer").Find(&dealsIncome)
+	// db.Find(deals, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress}} 
+
+
+}
+
 func CreateApi(router *gin.Engine, db *gorm.DB) {
 	router.POST("/api/deal", func(ctx *gin.Context) {
 		AddDeal(ctx, db)

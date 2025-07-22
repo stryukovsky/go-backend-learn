@@ -136,3 +136,7 @@ type TrackedWallet struct {
 	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
 	LastBlock uint64  `json:"lastBlock" binding:"required"`
 }
+
+type Balance struct {
+  
+}

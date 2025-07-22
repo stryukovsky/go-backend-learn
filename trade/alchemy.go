@@ -80,8 +80,12 @@ func AlchemyGetTransfersForAccount(w3 *web3.Web3, cache *redis.Client, worker Wo
 	if err != nil {
 		return EmptyArr, err
 	}
+	res, err := http.Post(req.URL.String(), "application/json", req.Body)
+	if err != nil {
+		return EmptyArr, err
+	}
 
-	responseRaw, err := io.ReadAll(req.Body)
+	responseRaw, err := io.ReadAll(res.Body)
 	if err != nil {
 		return EmptyArr, err
 	}

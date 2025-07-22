@@ -1,8 +1,5 @@
 package main
 
-
-
-
 import (
 
 	// "github.com/gin-gonic/gin"
@@ -28,6 +25,9 @@ func main() {
 	// db.Create(&trade.Token{ChainId: "1", Address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", Symbol: "ETH"})
 	// db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"})
 
-	trade.Cycle(db, 1)
+	// trade.Cycle(db, 1)
+	dealsIncome := []trade.Deal{}
+	db.Joins("ERC20Transfer").Find(&dealsIncome)
+
 	// router.Run()
 }
