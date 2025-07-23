@@ -29,7 +29,7 @@ func main() {
 
 	// trade.Cycle(db, 1)
 	dealsIncome := []trade.Deal{}
-	err = db.Joins("ERC20Transfer").Find(&dealsIncome).Error
+	err = db.Preload("BlockchainTransfer").Find(&dealsIncome, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Sender: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"}}).Error
 	if err != nil {
 		fmt.Println(err)
 	}
