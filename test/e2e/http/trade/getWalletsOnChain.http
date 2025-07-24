@@ -1,0 +1,2 @@
+## Get balances
+GET http://127.0.0.1:8080/api/balance/1/0x8EB8a3b98659Cce290402893d0123abb75E3ab28
