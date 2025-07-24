@@ -3,11 +3,18 @@ package trade
 import (
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net/http"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+type BalanceAcrossAllChains struct {
+	Address string `json:"address" binding:"required"`
+	Balance string `json:"balance" binding:"required"`
+}
 
 func AddDeal(ctx *gin.Context, db *gorm.DB) {
 	var deal Deal
@@ -41,17 +48,63 @@ func ListDeals(ctx *gin.Context, db *gorm.DB) {
 	}
 }
 
+func calculateBalance(income []Deal, outcome []Deal) string {
+	result := big.NewRat(0, 1)
+	for _, deal := range income {
+		result = result.Add(result, deal.VolumeUSD.Rat)
+	}
+	for _, deal := range outcome {
+		result = result.Sub(result, deal.VolumeUSD.Rat)
+	}
 
+	balance := result.FloatString(2)
+	return balance
+}
 
-func BalancesByWallet(ctx *gin.Context, db *gorm.DB) {
-  walletAddress :=  ctx.Param("wallet")
+// TODO: add caching
+func BalanceByWallet(ctx *gin.Context, db *gorm.DB) {
+	// make address checksum-format
+	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
 	slog.Info(fmt.Sprintf("Find balances across all blockchains of %s", walletAddress))
 
 	dealsIncome := []Deal{}
-	db.Joins("ERC20Transfer").Find(&dealsIncome)
-	// db.Find(deals, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress}} 
+	err := db.Preload("BlockchainTransfer").Find(&dealsIncome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress}}).Error
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
+		return
+	}
+	dealsOutcome := []Deal{}
+	err = db.Preload("BlockchainTransfer").Find(&dealsOutcome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress}}).Error
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch outcome deals for %s: %s", walletAddress, err.Error)})
+		return
+	}
+	slog.Info(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), len(dealsOutcome), walletAddress))
 
+	balance := calculateBalance(dealsIncome, dealsOutcome)
+	ctx.JSON(http.StatusOK, BalanceAcrossAllChains{Address: walletAddress, Balance: balance})
+}
 
+// TODO: add caching
+func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
+	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
+	chainId := ctx.Param("chainId")
+	dealsIncome := []Deal{}
+	dealsOutcome := []Deal{}
+	err := db.Preload("BlockchainTransfer").Find(dealsIncome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress, ChainId: chainId}})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
+		return
+	}
+	err = db.Preload("BlockchainTransfer").Find(dealsOutcome, Deal{BlockchainTransfer: ERC20Transfer{Sender: walletAddress, ChainId: chainId}})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
+		return
+	}
+}
+
+func GetWalletsOnChain(ctx *gin.Context, db *gorm.DB) {
+	
 }
 
 func CreateApi(router *gin.Engine, db *gorm.DB) {

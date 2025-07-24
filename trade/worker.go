@@ -99,7 +99,6 @@ func Cycle(db *gorm.DB, id uint) {
 		tokens = append(tokens, *erc20)
 	}
 
-	// criteria to consider wallet info is outdated (i.e. 100 intervals ago was updated)
 	criteria := 100 * config.BlocksInterval
 
 	alchemyIsAvailable := strings.TrimSpace(config.AlchemyApiUrl) != ""

@@ -112,6 +112,7 @@ type ERC20Transfer struct {
 	Recipient    string    `json:"recipient" binding:"required"`
 	Amount       DBInt     `json:"amount" binding:"required" gorm:"type:numeric(78,0)"`
 	Block        DBInt     `json:"blockNumber" binding:"required"`
+	ChainId      string    `json:"chainId" binding:"required"`
 	Timestamp    time.Time `json:"timestamp" binding:"required"`
 	TxId         string    `json:"txId" gorm:"uniqueIndex" binding:"required"`
 }
@@ -132,11 +133,10 @@ type Token struct {
 
 type TrackedWallet struct {
 	gorm.Model
-	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
-	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
-	LastBlock uint64  `json:"lastBlock" binding:"required"`
+	Address   string `json:"address" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
+	ChainId   string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
+	LastBlock uint64 `json:"lastBlock" binding:"required"`
 }
 
 type Balance struct {
-  
 }
