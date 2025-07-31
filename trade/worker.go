@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 
 	"log/slog"
 
@@ -99,36 +98,16 @@ func Cycle(db *gorm.DB, id uint) {
 		tokens = append(tokens, *erc20)
 	}
 
-	criteria := 100 * config.BlocksInterval
-
-	alchemyIsAvailable := strings.TrimSpace(config.AlchemyApiUrl) != ""
-
-	// wallets which are actual enough to fetch transfers from blockchain
-	walletsToFetchFromNode := make([]TrackedWallet, 0, len(trackedWallets))
-	// minimal block number of every wallet
+	var participants []string
 	var minBlockOfWalletsToFetchFromNode uint64 = math.MaxUint64
 	for _, wallet := range trackedWallets {
-		startFromBlock := wallet.LastBlock
-		if currentBlockchainBlock-startFromBlock > criteria && alchemyIsAvailable {
-			transfers, err := AlchemyGetTransfersForAccount(web3, cache, config, wallet)
-			if err != nil {
-				slog.Warn(fmt.Sprintf("Error when interacting with alchemy: %s", err.Error()))
-				continue
-			}
-			db.CreateInBatches(transfers, len(transfers))
-			wallet.LastBlock = currentBlockchainBlock
-			db.Save(wallet)
-		} else {
-			walletsToFetchFromNode = append(walletsToFetchFromNode, wallet)
-			minBlockOfWalletsToFetchFromNode = min(minBlockOfWalletsToFetchFromNode, wallet.LastBlock)
+		criteriaWalletIsOutDated := wallet.LastBlock < currentBlockchainBlock-config.BlocksInterval
+		if criteriaWalletIsOutDated {
+			slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
+			participants = append(participants, wallet.Address)
 		}
 	}
-	var participants []string
-	for _, wallet := range walletsToFetchFromNode {
-		slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
-		participants = append(participants, strings.ToLower(wallet.Address))
-	}
-	if len(walletsToFetchFromNode) > 0 {
+	if len(participants) > 0 {
 		FetchTransfersFromNode(db,
 			cache,
 			&config,
