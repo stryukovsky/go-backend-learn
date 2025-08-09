@@ -91,14 +91,16 @@ func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 	chainId := ctx.Param("chainId")
 	dealsIncome := []Deal{}
 	dealsOutcome := []Deal{}
-	err := db.Preload("BlockchainTransfer").Find(&dealsIncome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress, ChainId: chainId}})
+	err := db.Preload("BlockchainTransfer").Find(&dealsIncome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress, ChainId: chainId}}).Error
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error),
+		})
 		return
 	}
-	err = db.Preload("BlockchainTransfer").Find(&dealsOutcome, Deal{BlockchainTransfer: ERC20Transfer{Sender: walletAddress, ChainId: chainId}})
+	err = db.Preload("BlockchainTransfer").Find(&dealsOutcome, Deal{BlockchainTransfer: ERC20Transfer{Sender: walletAddress, ChainId: chainId}}).Error
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error())})
 		return
 	}
 }
@@ -106,13 +108,13 @@ func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 func GetWalletsOnChain(ctx *gin.Context, db *gorm.DB) {
 	chainId := ctx.Param("chainId")
 	wallets := []TrackedWallet{}
-	err :=	db.Find(&wallets, TrackedWallet{ChainId: chainId}).Error
+	err := db.Find(&wallets, TrackedWallet{ChainId: chainId}).Error
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to find wallets"})
 		return
 	}
 	ctx.JSON(http.StatusOK, wallets)
-	
+
 }
 
 func CreateApi(router *gin.Engine, db *gorm.DB) {
