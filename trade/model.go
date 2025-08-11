@@ -105,9 +105,6 @@ type Deal struct {
 type ERC20Transfer struct {
 	gorm.Model
 	TokenAddress string    `json:"tokenAddress" binding:"required"`
-	Name         string    `json:"name" binding:"required"`
-	Symbol       string    `json:"symbol" binding:"required"`
-	Decimals     DBInt     `json:"decimals" binding:"required"`
 	Sender       string    `json:"sender" binding:"required"`
 	Recipient    string    `json:"recipient" binding:"required"`
 	Amount       DBInt     `json:"amount" binding:"required" gorm:"type:numeric(78,0)"`
@@ -125,9 +122,10 @@ type Worker struct {
 
 type Token struct {
 	gorm.Model
-	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
-	Symbol  string `json:"symbol" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
-	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
+	ChainId  string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
+	Symbol   string `json:"symbol" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
+	Address  string `json:"address" binding:"required" gorm:"uniqueIndex:idx_token_uniqueness"`
+	Decimals DBInt  `json:"decimals" binding:"required"`
 }
 
 type TrackedWallet struct {
