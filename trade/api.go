@@ -20,6 +20,7 @@ func AddDeal(ctx *gin.Context, db *gorm.DB) {
 	var deal Deal
 	if err := ctx.ShouldBindJSON(&deal); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	tx := db.Create(&deal)
 	if tx.Error != nil {
@@ -63,26 +64,28 @@ func calculateBalance(income []Deal, outcome []Deal) string {
 
 // TODO: add caching
 func BalanceByWallet(ctx *gin.Context, db *gorm.DB) {
-	// make address checksum-format
-	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
-	slog.Info(fmt.Sprintf("Find balances across all blockchains of %s", walletAddress))
+walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
+slog.Info(fmt.Sprintf("Find balances across all blockchains of %s", walletAddress))
 
-	dealsIncome := []Deal{}
-	err := db.Preload("BlockchainTransfer").Find(&dealsIncome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress}}).Error
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
-		return
-	}
-	dealsOutcome := []Deal{}
-	err = db.Preload("BlockchainTransfer").Find(&dealsOutcome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress}}).Error
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch outcome deals for %s: %s", walletAddress, err.Error)})
-		return
-	}
-	slog.Info(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), len(dealsOutcome), walletAddress))
+var dealsIncome []Deal
+countIncome := 0
+err := db.Preload("BlockchainTransfer").Where("blockchain_transfer.recipient = ?", walletAddress).First(&dealsIncome, &countIncome).Error
+if err != nil {
+ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
+return
+}
 
-	balance := calculateBalance(dealsIncome, dealsOutcome)
-	ctx.JSON(http.StatusOK, BalanceAcrossAllChains{Address: walletAddress, Balance: balance})
+var dealsOutcome []Deal
+countOutcome := 0
+db.Preload("BlockchainTransfer").Where("blockchain_transfer.sender = ?", walletAddress).First(&dealsOutcome, &countOutcome).Error
+if err != nil {
+ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch outcome deals for %s: %s", walletAddress, err.Error)})
+return
+}
+slog.Info(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), countOutcome, walletAddress))
+
+balance := calculateBalance(dealsIncome, dealsOutcome)
+ctx.JSON(http.StatusOK, BalanceAcrossAllChains{Address: walletAddress, Balance: balance})
 }
 
 // TODO: add caching
