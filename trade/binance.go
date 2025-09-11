@@ -67,14 +67,14 @@ func GetClosePrice(symbol string, instant *time.Time) (*big.Rat, error) {
 	return closePrice, nil
 }
 
-func CreateDeal(rdb *redis.Client, transfer ERC20Transfer) (*Deal, error) {
-	closePrice, err := GetCachedSymbolPriceAtTime(rdb, transfer.Symbol, &transfer.Timestamp)
+func CreateDeal(rdb *redis.Client, transfer ERC20Transfer, token ERC20) (*Deal, error) {
+	closePrice, err := GetCachedSymbolPriceAtTime(rdb, token.Symbol, &transfer.Timestamp)
 	if err != nil {
 		return nil, err
 	}
 
 	volumeToken := big.NewRat(1, 1)
-	volumeToken = volumeToken.SetFrac(transfer.Amount.Int, new(big.Int).Exp(big.NewInt(10), transfer.Decimals.Int, nil))
+	volumeToken = volumeToken.SetFrac(transfer.Amount.Int, new(big.Int).Exp(big.NewInt(10), &token.Decimals, nil))
 
 	volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
 	return &Deal{

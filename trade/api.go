@@ -117,7 +117,7 @@ func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 
 	key := cacheKeyPrefixBalanceOfWalletOnChain + chainId + ":" + walletAddress
 	cached, err := rdb.Get(context.Background(), key).Result()
-	if err != nil {
+	if err != nil && err != redis.Nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "could not get balance from cache due to internal error " + err.Error()})
 		return
 	}
@@ -180,7 +180,16 @@ func GetWalletsOnChain(ctx *gin.Context, db *gorm.DB) {
 		return
 	}
 	ctx.JSON(http.StatusOK, wallets)
+}
 
+func ListWallets(ctx *gin.Context, db *gorm.DB) {
+	wallets := []TrackedWallet{}
+	err := db.Find(&wallets).Error
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list wallets"})
+		return
+	}
+	ctx.JSON(http.StatusOK, wallets)
 }
 
 func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
@@ -196,10 +205,10 @@ func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	router.GET("/api/chain/:chainId/wallets", func(ctx *gin.Context) {
 		GetWalletsOnChain(ctx, db)
 	})
-	router.GET("/api/balance/:chainId/:wallet", func(ctx *gin.Context) {
+	router.GET("/api/balance/chainAndWallet/:chainId/:wallet", func(ctx *gin.Context) {
 		BalanceByWalletAndChain(ctx, db, rdb)
 	})
-	router.GET("/api/balance/:wallet", func(ctx *gin.Context) {
+	router.GET("/api/balance/wallet/:wallet", func(ctx *gin.Context) {
 		BalanceByWallet(ctx, db, rdb)
 	})
 }

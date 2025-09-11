@@ -1,2 +1,2 @@
 ## Get balances
-GET http://127.0.0.1:8080/api/balance/1/0xc3d688B66703497DAA19211EEdff47f25384cdc3
+GET http://127.0.0.1:8080/api/balance/chainAndWallet/1/0xc3d688B66703497DAA19211EEdff47f25384cdc3

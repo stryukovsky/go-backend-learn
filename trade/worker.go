@@ -31,7 +31,7 @@ func FetchTransfersFromNode(
 		}
 		slog.Info(fmt.Sprintf("[%s] Found %d transfers where tracked wallets participated", token.Symbol, len(transfers)))
 		for _, transfer := range transfers {
-			deal, err := CreateDeal(cache, transfer)
+			deal, err := CreateDeal(cache, transfer, token)
 			if err != nil {
 				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %s", token.Symbol, transfer.TxId, err.Error()))
 			} else {
@@ -62,11 +62,8 @@ func Cycle(db *gorm.DB, id uint) {
 		return
 	}
 
-	cache := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "redis",
-		DB:       0,
-	})
+	cache := NewRedisClient()
+
 
 	var trackedWallets []TrackedWallet
 	err = db.Find(&trackedWallets, &TrackedWallet{ChainId: chainId.String()}).Error

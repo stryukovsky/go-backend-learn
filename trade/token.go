@@ -74,8 +74,6 @@ func (token *ERC20) ListTransfers(
 				TokenAddress: token.Contract.Address().Hex(),
 				Block:        DBInt{blockNumber},
 				Timestamp:    *timestamp,
-				Decimals:     DBInt{&token.Decimals},
-				Symbol:       token.Symbol,
 				TxId:         e.TransactionHash.Hex(),
 			}
 			result = append(result, transfer)

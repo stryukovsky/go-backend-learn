@@ -19,6 +19,14 @@ var (
 
 var ctx = context.Background()
 
+func NewRedisClient() (*redis.Client){
+	return redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "redis",
+		DB:       0,
+	})
+}
+
 func GetCachedBlockTimestamp(w3 *web3.Web3, rdb *redis.Client, block uint64) (*time.Time, error) {
 	blockIdentifierStr := fmt.Sprintf("block:%d", block)
 	timestampString, err := rdb.Get(ctx, blockIdentifierStr).Result()

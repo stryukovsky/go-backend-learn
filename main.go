@@ -14,7 +14,8 @@ func main() {
 	}
 	db.AutoMigrate(&trade.Deal{}, &trade.ERC20Transfer{}, &trade.Worker{}, &trade.Token{}, &trade.TrackedWallet{})
 	router := gin.Default()
-	trade.CreateApi(router, db)
+	redis := trade.NewRedisClient()
+	trade.CreateApi(router, db, redis)
 	// worker := trade.Worker{
 	// 	BlockchainUrl:  "http://localhost:8545",
 	// 	LastBlock:      22761436,
