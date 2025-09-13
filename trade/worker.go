@@ -13,6 +13,7 @@ import (
 )
 
 func FetchTransfersFromNode(
+	rpcUrl string,
 	db *gorm.DB,
 	cache *redis.Client,
 	config *Worker,
@@ -24,7 +25,7 @@ func FetchTransfersFromNode(
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
 	for _, token := range tokens {
-		transfers, err := token.ListTransfersOfParticipants(participants, startFromBlock, endInBlock, cache)
+		transfers, err := token.ListTransfersOfParticipants(rpcUrl, participants, startFromBlock, endInBlock, cache)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
 			continue
@@ -42,7 +43,7 @@ func FetchTransfersFromNode(
 	}
 }
 
-func Cycle(db *gorm.DB, id uint) {
+func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 	var config Worker
 	result := db.First(&config, id)
 	if result.Error != nil {
@@ -61,9 +62,6 @@ func Cycle(db *gorm.DB, id uint) {
 		slog.Warn("Cannot fetch chain id")
 		return
 	}
-
-	cache := NewRedisClient()
-
 
 	var trackedWallets []TrackedWallet
 	err = db.Find(&trackedWallets, &TrackedWallet{ChainId: chainId.String()}).Error
@@ -98,14 +96,15 @@ func Cycle(db *gorm.DB, id uint) {
 	var participants []string
 	var minBlockOfWalletsToFetchFromNode uint64 = math.MaxUint64
 	for _, wallet := range trackedWallets {
-		criteriaWalletIsOutDated := wallet.LastBlock < currentBlockchainBlock-config.BlocksInterval
-		if criteriaWalletIsOutDated {
+		// criteriaWalletIsOutDated := wallet.LastBlock < currentBlockchainBlock-config.BlocksInterval
+		// if criteriaWalletIsOutDated {
 			slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
 			participants = append(participants, wallet.Address)
-		}
+		// } 
+		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
 	}
 	if len(participants) > 0 {
-		FetchTransfersFromNode(db,
+		FetchTransfersFromNode(config.BlockchainUrl, db,
 			cache,
 			&config,
 			minBlockOfWalletsToFetchFromNode,

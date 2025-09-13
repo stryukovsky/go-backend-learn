@@ -91,14 +91,15 @@ func BalanceByWallet(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	countIncome := 0
 	err = db.Preload("BlockchainTransfer").Where("blockchain_transfer.recipient = ?", walletAddress).First(&dealsIncome, &countIncome).Error
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error)})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error())})
 		return
 	}
 
 	var dealsOutcome []Deal
 	countOutcome := 0
+	err = db.Preload("BlockchainTransfer").Where("blockchain_transfer.sender = ?", walletAddress).First(&dealsIncome, &countOutcome).Error
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch outcome deals for %s: %s", walletAddress, err.Error)})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot fetch outcome deals for %s: %s", walletAddress, err.Error())})
 		return
 	}
 	slog.Info(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), countOutcome, walletAddress))
@@ -137,7 +138,7 @@ func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 		Error
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error),
+			"error": fmt.Sprintf("Cannot fetch income deals for %s: %s", walletAddress, err.Error()),
 		})
 		return
 	}
@@ -164,7 +165,7 @@ func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	}
 	err = rdb.Set(context.Background(), key, result, 15*time.Minute).Err()
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot set to cache balance", err.Error())})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Cannot set to cache balance %s", err.Error())})
 		return
 	}
 

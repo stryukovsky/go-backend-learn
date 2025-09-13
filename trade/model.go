@@ -114,6 +114,19 @@ type ERC20Transfer struct {
 	TxId         string    `json:"txId" gorm:"uniqueIndex" binding:"required"`
 }
 
+func NewERC20Transfer(address string, sender string, recipient string, amount *big.Int, block *big.Int, chainId string, timestamp *time.Time, txId string) ERC20Transfer {
+	return ERC20Transfer{
+		TokenAddress: address,
+		Sender:       sender,
+		Recipient:    recipient,
+		Amount:       DBInt{amount},
+		Block:        DBInt{block},
+		ChainId:      chainId,
+		Timestamp:    *timestamp,
+		TxId:         txId,
+	}
+}
+
 type Worker struct {
 	gorm.Model
 	BlockchainUrl  string `json:"blockchainUrl" binding:"required"`
