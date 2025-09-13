@@ -13,7 +13,7 @@ import (
 )
 
 func FetchTransfersFromNode(
-	rpcUrl string,
+	chainId string,
 	db *gorm.DB,
 	cache *redis.Client,
 	config *Worker,
@@ -25,7 +25,7 @@ func FetchTransfersFromNode(
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
 	for _, token := range tokens {
-		transfers, err := token.ListTransfersOfParticipants(rpcUrl, participants, startFromBlock, endInBlock, cache)
+		transfers, err := token.ListTransfersOfParticipants(config.BlockchainUrl, chainId, participants, startFromBlock, endInBlock, cache)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
 			continue
@@ -104,7 +104,9 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
 	}
 	if len(participants) > 0 {
-		FetchTransfersFromNode(config.BlockchainUrl, db,
+		FetchTransfersFromNode(
+			chainId.String(),
+			db,
 			cache,
 			&config,
 			minBlockOfWalletsToFetchFromNode,

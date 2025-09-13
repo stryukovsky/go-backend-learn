@@ -6,7 +6,6 @@ require (
 	github.com/chenzhijie/go-web3 v0.0.0-20241004101201-e508ccdb37f7
 	github.com/ethereum/go-ethereum v1.15.11
 	github.com/gin-gonic/gin v1.10.0
-	github.com/golang/protobuf v1.5.4
 	github.com/joomcode/errorx v1.2.0
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/stretchr/testify v1.10.0
@@ -58,6 +57,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/samber/lo v1.51.0 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/supranational/blst v0.3.15 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect

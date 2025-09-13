@@ -3,9 +3,10 @@ package trade
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
 	"log/slog"
 	"math/big"
+	"sync"
 
 	"github.com/chenzhijie/go-web3"
 	"github.com/chenzhijie/go-web3/eth"
@@ -15,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/joomcode/errorx"
 	"github.com/redis/go-redis/v9"
+	"github.com/samber/lo"
 )
 
 type ERC20 struct {
@@ -45,45 +47,7 @@ func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
 
 var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-// func (token *ERC20) ListTransfers(
-// 	fliter *types.Fliter,
-// 	cache *redis.Client,
-// 	filterTransfer func(string, string, *big.Int) bool,
-// ) ([]ERC20Transfer, error) {
-// 	logs, err := token.W3.Eth.GetLogs(fliter)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	slog.Info(fmt.Sprintf("[%s] Found %d events. Filter them to find transfers of tracked wallets", token.Symbol, len(logs)))
-// 	result := make([]ERC20Transfer, 0, len(logs))
-// 	for _, e := range logs {
-// 		if len(e.Topics) != 3 {
-// 			continue
-// 		}
-// 		from := common.HexToAddress(e.Topics[1]).Hex()
-// 		to := common.HexToAddress(e.Topics[2]).Hex()
-// 		amount := common.HexToHash(e.Data).Big()
-// 		if filterTransfer(from, to, amount) {
-//
-// 			blockNumber := common.HexToHash(e.BlockNumber).Big()
-// 			timestamp, err := GetCachedBlockTimestamp(token.W3, cache, blockNumber.Uint64())
-// 			if err != nil {
-// 				return nil, err
-// 			}
-// 			transfer := ERC20Transfer{
-// 				Sender:       from,
-// 				Recipient:    to,
-// 				Amount:       DBInt{amount},
-// 				TokenAddress: token.Contract.Address().Hex(),
-// 				Block:        DBInt{blockNumber},
-// 				Timestamp:    *timestamp,
-// 				TxId:         e.TransactionHash.Hex(),
-// 			}
-// 			result = append(result, transfer)
-// 		}
-// 	}
-// 	return result, nil
-// }
+const ParallelFactor = 16
 
 func (token *ERC20) ListTransfersOfParticipants(
 	rpcUrl string,
@@ -101,50 +65,72 @@ func (token *ERC20) ListTransfersOfParticipants(
 	for i, participant := range participants {
 		formattedParticipants[i] = common.HexToHash(participant)
 	}
-	logsParticipantsSenders, err := 
+	logsParticipantsSenders, err :=
 		client.FilterLogs(context.Background(), ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromBlock)),
-		ToBlock:   big.NewInt(int64(toBlock)),
-		Addresses: []common.Address{common.HexToAddress(token.Address)},
-		Topics: [][]common.Hash{
-			{common.HexToHash(TransferTopic)},
-			formattedParticipants,
-			{},
-		},
-	})
+			FromBlock: big.NewInt(int64(fromBlock)),
+			ToBlock:   big.NewInt(int64(toBlock)),
+			Addresses: []common.Address{common.HexToAddress(token.Address)},
+			Topics: [][]common.Hash{
+				{common.HexToHash(TransferTopic)},
+				formattedParticipants,
+				{},
+			},
+		})
 	if err != nil {
 		return []ERC20Transfer{}, err
 	}
-	logsParticipantsRecipients, err := 
+	logsParticipantsRecipients, err :=
 		client.FilterLogs(context.Background(), ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromBlock)),
-		ToBlock:   big.NewInt(int64(toBlock)),
-		Addresses: []common.Address{common.HexToAddress(token.Address)},
-		Topics: [][]common.Hash{
-			{common.HexToHash(TransferTopic)},
-			{},
-			formattedParticipants,
-		},
-	})
+			FromBlock: big.NewInt(int64(fromBlock)),
+			ToBlock:   big.NewInt(int64(toBlock)),
+			Addresses: []common.Address{common.HexToAddress(token.Address)},
+			Topics: [][]common.Hash{
+				{common.HexToHash(TransferTopic)},
+				{},
+				formattedParticipants,
+			},
+		})
 	if err != nil {
 		return []ERC20Transfer{}, err
 	}
 	allLogs := append(logsParticipantsSenders, logsParticipantsRecipients...)
+	slog.Info(fmt.Sprintf("Scanned %d transfers", len(allLogs)))
+	logsChunks := lo.Chunk(allLogs, ParallelFactor)
+	resultCh := make(chan ERC20Transfer)
 	result := make([]ERC20Transfer, len(allLogs))
-	for i, event := range allLogs {
-		sender := common.BytesToAddress(event.Topics[1].Bytes()).Hex()
-		recipient := common.BytesToAddress(event.Topics[2].Bytes()).Hex()
-		amount := common.BytesToHash(event.Data).Big()
-		txId := event.TxHash.Hex()
-		block := big.NewInt(int64(event.BlockNumber))
-		timestamp, err := GetCachedBlockTimestamp(token.W3, cache, event.BlockNumber)
-		if err != nil {
-			slog.Warn("Cannot fetch from cache or blockchain info on block %d timestamp: %s", event.BlockNumber, err.Error())	
-			continue
+
+	var wg sync.WaitGroup
+	wg.Add(ParallelFactor)
+
+	go func() {
+		for i := range ParallelFactor {
+			go func() {
+				defer wg.Done()
+				for _, event := range logsChunks[i] {
+					sender := common.BytesToAddress(event.Topics[1].Bytes()).Hex()
+					recipient := common.BytesToAddress(event.Topics[2].Bytes()).Hex()
+					amount := common.BytesToHash(event.Data).Big()
+					txId := event.TxHash.Hex()
+					block := big.NewInt(int64(event.BlockNumber))
+					timestamp, err := GetCachedBlockTimestamp(token.W3, cache, event.BlockNumber)
+					if err != nil {
+						slog.Warn(fmt.Sprintf("Cannot fetch from cache or blockchain info on block %d timestamp: %s", event.BlockNumber, err.Error()))
+						continue
+					}
+					transfer := NewERC20Transfer(token.Address, sender, recipient, amount, block, chainId, timestamp, txId)
+					resultCh <- transfer
+				}
+			}()
 		}
-		transfer := NewERC20Transfer(token.Address, sender, recipient, amount, block, chainId, timestamp, txId)
+		wg.Wait()
+		close(resultCh)
+	}()
+	i := 0
+	for transfer := range resultCh {
 		result[i] = transfer
+		i++
 	}
+
 	return result, nil
 }
 

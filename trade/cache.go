@@ -2,6 +2,7 @@ package trade
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/chenzhijie/go-web3"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 var (
@@ -19,7 +21,7 @@ var (
 
 var ctx = context.Background()
 
-func NewRedisClient() (*redis.Client){
+func NewRedisClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
 		Password: "redis",
@@ -82,12 +84,106 @@ func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.
 	}
 
 	slog.Info(fmt.Sprintf("Key already cached %s = %s", identifierStr, quoteString))
-	quote , success:= new(big.Rat).SetString(quoteString)
+	quote, success := new(big.Rat).SetString(quoteString)
 	if !success {
 		return nil, BadRationalValue
 	}
 	return quote, nil
+}
 
-	
+const cacheKeyPrefixBalanceAcrossAllChains = "balanceAcrossAllChains:"
 
+func calculateBalance(income []Deal, outcome []Deal) string {
+	result := big.NewRat(0, 1)
+	for _, deal := range income {
+		result = result.Add(result, deal.VolumeUSD.Rat)
+	}
+	for _, deal := range outcome {
+		result = result.Sub(result, deal.VolumeUSD.Rat)
+	}
+
+	balance := result.FloatString(2)
+	return balance
+}
+
+func GetCachedBalanceOfWallet(db *gorm.DB, rdb *redis.Client, walletAddress string) (*BalanceAcrossAllChains, error) {
+
+	cacheKey := cacheKeyPrefixBalanceAcrossAllChains + walletAddress
+	cachedBalance, err := rdb.Get(context.Background(), cacheKey).Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+	if cachedBalance == "" {
+		var dealsIncome []Deal
+		countIncome := 0
+		err = db.Preload("BlockchainTransfer").Where("blockchain_transfer.recipient = ?", walletAddress).First(&dealsIncome, &countIncome).Error
+		if err != nil {
+			return nil, err
+		}
+
+		var dealsOutcome []Deal
+		countOutcome := 0
+		err = db.Preload("BlockchainTransfer").Where("blockchain_transfer.sender = ?", walletAddress).First(&dealsIncome, &countOutcome).Error
+		if err != nil {
+			return nil, err
+		}
+		slog.Info(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), countOutcome, walletAddress))
+
+		balance := calculateBalance(dealsIncome, dealsOutcome)
+		cachedData, _ := json.Marshal(BalanceAcrossAllChains{Address: walletAddress, Balance: balance})
+		rdb.Set(ctx, cacheKey, cachedData, 5*time.Minute)
+		return NewBalanceAcrossAllChains(walletAddress, balance), nil
+
+	} else {
+		var balanceAcrossAllChains BalanceAcrossAllChains
+		err = json.Unmarshal([]byte(cachedBalance), &balanceAcrossAllChains)
+		if err != nil {
+			return nil, err
+		}
+		return &balanceAcrossAllChains, nil
+	}
+}
+
+const cacheKeyPrefixBalanceOfWalletOnChain = "balanceOnChain:"
+
+func GetCachedBalanceOfWalletOnChain(db *gorm.DB, rdb *redis.Client, chainId string, walletAddress string) (*BalanceOnChain, error) {
+	key := cacheKeyPrefixBalanceOfWalletOnChain + chainId + ":" + walletAddress
+	cached, err := rdb.Get(context.Background(), key).Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
+	if cached != "" {
+		var result BalanceOnChain
+		err = json.Unmarshal([]byte(cached), &result)
+		if err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
+	dealsIncome := []Deal{}
+	dealsOutcome := []Deal{}
+	err = db.
+		Preload("BlockchainTransfer").
+		Find(&dealsIncome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress, ChainId: chainId}}).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	err = db.
+		Preload("BlockchainTransfer").
+		Find(&dealsOutcome, Deal{BlockchainTransfer: ERC20Transfer{Sender: walletAddress, ChainId: chainId}}).
+		Error
+	if err != nil {
+		return nil, err
+	}
+	balance := calculateBalance(dealsIncome, dealsOutcome)
+
+	result := NewBalanceOnChain(chainId, walletAddress, balance)
+	err = rdb.Set(context.Background(), key, result, 15*time.Minute).Err()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
