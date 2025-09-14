@@ -1,0 +1,2 @@
+## Get wallets
+GET http://127.0.0.1:8080/api/deals/0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b

@@ -91,8 +91,6 @@ func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.
 	return quote, nil
 }
 
-const cacheKeyPrefixBalanceAcrossAllChains = "balanceAcrossAllChains:"
-
 func calculateBalance(income []Deal, outcome []Deal) string {
 	result := big.NewRat(0, 1)
 	for _, deal := range income {
@@ -107,8 +105,7 @@ func calculateBalance(income []Deal, outcome []Deal) string {
 }
 
 func GetCachedBalanceOfWallet(db *gorm.DB, rdb *redis.Client, walletAddress string) (*BalanceAcrossAllChains, error) {
-
-	cacheKey := cacheKeyPrefixBalanceAcrossAllChains + walletAddress
+	cacheKey := fmt.Sprintf("balanceAcrossAllChains:%s", walletAddress)
 	cachedBalance, err := rdb.Get(context.Background(), cacheKey).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err
@@ -144,10 +141,8 @@ func GetCachedBalanceOfWallet(db *gorm.DB, rdb *redis.Client, walletAddress stri
 	}
 }
 
-const cacheKeyPrefixBalanceOfWalletOnChain = "balanceOnChain:"
-
 func GetCachedBalanceOfWalletOnChain(db *gorm.DB, rdb *redis.Client, chainId string, walletAddress string) (*BalanceOnChain, error) {
-	key := cacheKeyPrefixBalanceOfWalletOnChain + chainId + ":" + walletAddress
+	key := fmt.Sprintf("BalanceOnChain:%s:%s", chainId, walletAddress)
 	cached, err := rdb.Get(context.Background(), key).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err

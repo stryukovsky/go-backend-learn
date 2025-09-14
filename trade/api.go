@@ -11,6 +11,10 @@ import (
 	"gorm.io/gorm"
 )
 
+func apiErr(ctx *gin.Context, err error) {
+	ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+}
+
 type BalanceAcrossAllChains struct {
 	Address string `json:"address" binding:"required"`
 	Balance string `json:"balance" binding:"required"`
@@ -34,6 +38,20 @@ func NewBalanceOnChain(chainId string, address string, balance string) *BalanceO
 		Address: address,
 		Balance: balance,
 		ChainId: chainId,
+	}
+}
+
+type DealsByWallet struct {
+	Address  string `json:"address" binding:"required"`
+	DealsIn  []Deal `json:"dealsIn" binding:"required"`
+	DealsOut []Deal `json:"dealsOut" binding:"required"`
+}
+
+func NewDealsByWallet(wallet string, dealsIn []Deal, dealsOut []Deal) *DealsByWallet {
+	return &DealsByWallet{
+		Address:  wallet,
+		DealsIn:  dealsIn,
+		DealsOut: dealsOut,
 	}
 }
 
@@ -74,7 +92,7 @@ func BalanceByWallet(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
 	balance, err := GetCachedBalanceOfWallet(db, rdb, walletAddress)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apiErr(ctx, err)
 		return
 	}
 	slog.Info(fmt.Sprintf("Find balances across all blockchains of %s", walletAddress))
@@ -86,7 +104,7 @@ func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	chainId := ctx.Param("chainId")
 	result, err := GetCachedBalanceOfWalletOnChain(db, rdb, chainId, walletAddress)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		apiErr(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, result)
@@ -97,7 +115,7 @@ func GetWalletsOnChain(ctx *gin.Context, db *gorm.DB) {
 	wallets := []TrackedWallet{}
 	err := db.Find(&wallets, TrackedWallet{ChainId: chainId}).Error
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to find wallets"})
+		apiErr(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, wallets)
@@ -107,10 +125,29 @@ func ListWallets(ctx *gin.Context, db *gorm.DB) {
 	wallets := []TrackedWallet{}
 	err := db.Find(&wallets).Error
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list wallets"})
+		apiErr(ctx, err)
 		return
 	}
 	ctx.JSON(http.StatusOK, wallets)
+}
+
+func ListDealsByWallet(ctx *gin.Context, db *gorm.DB) {
+	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
+	dealsAsSender := []Deal{}
+	err := db.Preload("BlockchainTransfer").Find(&dealsAsSender, Deal{BlockchainTransfer: ERC20Transfer{Sender: wallet}}).Error
+	if err != nil {
+		apiErr(ctx, err)
+		return
+	}
+
+	dealsAsRecipient := []Deal{}
+	err = db.Preload("BlockchainTransfer").Find(&dealsAsRecipient, Deal{BlockchainTransfer: ERC20Transfer{Recipient: wallet}}).Error
+	if err != nil {
+		apiErr(ctx, err)
+		return
+	}
+	result := NewDealsByWallet(wallet, dealsAsRecipient, dealsAsSender)
+	ctx.JSON(http.StatusOK, result)
 }
 
 func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
@@ -131,5 +168,8 @@ func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	})
 	router.GET("/api/balance/wallet/:wallet", func(ctx *gin.Context) {
 		BalanceByWallet(ctx, db, rdb)
+	})
+	router.GET("/api/deals/:wallet", func(ctx *gin.Context) {
+		ListDealsByWallet(ctx, db)
 	})
 }

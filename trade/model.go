@@ -148,5 +148,3 @@ type TrackedWallet struct {
 	LastBlock uint64 `json:"lastBlock" binding:"required"`
 }
 
-type Balance struct {
-}

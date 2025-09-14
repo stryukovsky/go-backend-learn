@@ -126,7 +126,7 @@ var (
 	BadSymbolValue   error = errors.New("Bad symbol of ERC20 contract")
 )
 
-func CreateERC20(client *ethclient.Client, address string, symbol string) (*ERC20, error) {
+func NewERC20(client *ethclient.Client, address string, symbol string) (*ERC20, error) {
 	caller, err := NewIERC20Caller(common.HexToAddress(address), client)
 	if err != nil {
 		return nil, err
