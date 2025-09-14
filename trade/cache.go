@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/chenzhijie/go-web3"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -29,7 +29,7 @@ func NewRedisClient() *redis.Client {
 	})
 }
 
-func GetCachedBlockTimestamp(w3 *web3.Web3, rdb *redis.Client, block uint64) (*time.Time, error) {
+func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block uint64) (*time.Time, error) {
 	blockIdentifierStr := fmt.Sprintf("block:%d", block)
 	timestampString, err := rdb.Get(ctx, blockIdentifierStr).Result()
 	if err != nil {
@@ -38,11 +38,11 @@ func GetCachedBlockTimestamp(w3 *web3.Web3, rdb *redis.Client, block uint64) (*t
 		}
 		slog.Info(fmt.Sprintf("Block %s is new, fetching its date from blockchain", blockIdentifierStr))
 
-		blockHeader, err := w3.Eth.GetBlockHeaderByNumber(big.NewInt(int64(block)), false)
+		blockHeader, err := client.BlockByNumber(context.Background(), big.NewInt(int64(block)))
 		if err != nil {
 			return nil, err
 		}
-		blockTimestamp := blockHeader.Time
+		blockTimestamp := blockHeader.Time()
 		blockTimestampString := fmt.Sprintf("%d", blockTimestamp)
 		err = rdb.Set(ctx, blockIdentifierStr, blockTimestampString, time.Hour*3).Err()
 		if err != nil {

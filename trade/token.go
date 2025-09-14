@@ -8,23 +8,19 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/chenzhijie/go-web3"
-	"github.com/chenzhijie/go-web3/eth"
-
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/joomcode/errorx"
 	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
 )
 
 type ERC20 struct {
-	W3       *web3.Web3
+	client *ethclient.Client
+	caller *IERC20Caller
 	Address  string
-	Contract eth.Contract
 	Decimals big.Int
-	Name     string
 	Symbol   string
 }
 
@@ -33,14 +29,9 @@ var (
 )
 
 func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
-	rawBalance, err := token.Contract.Call("balanceOf", common.HexToAddress(recipient))
+	balance, err := token.caller.BalanceOf(&bind.CallOpts{}, common.HexToAddress(recipient))
 	if err != nil {
-		return nil, errorx.Decorate(err, "Cannot call balanceOf")
-	}
-	var balance *big.Int
-	var success bool
-	if balance, success = rawBalance.(*big.Int); !success {
-		return nil, BadBalance
+		return nil, err
 	}
 	return balance, nil
 }
@@ -50,23 +41,18 @@ var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628
 const ParallelFactor = 16
 
 func (token *ERC20) ListTransfersOfParticipants(
-	rpcUrl string,
 	chainId string,
 	participants []string,
 	fromBlock uint64,
 	toBlock uint64,
 	cache *redis.Client,
 ) ([]ERC20Transfer, error) {
-	client, err := ethclient.Dial(rpcUrl)
-	if err != nil {
-		return []ERC20Transfer{}, err
-	}
 	formattedParticipants := make([]common.Hash, len(participants))
 	for i, participant := range participants {
 		formattedParticipants[i] = common.HexToHash(participant)
 	}
 	logsParticipantsSenders, err :=
-		client.FilterLogs(context.Background(), ethereum.FilterQuery{
+		token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 			FromBlock: big.NewInt(int64(fromBlock)),
 			ToBlock:   big.NewInt(int64(toBlock)),
 			Addresses: []common.Address{common.HexToAddress(token.Address)},
@@ -80,7 +66,7 @@ func (token *ERC20) ListTransfersOfParticipants(
 		return []ERC20Transfer{}, err
 	}
 	logsParticipantsRecipients, err :=
-		client.FilterLogs(context.Background(), ethereum.FilterQuery{
+		token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 			FromBlock: big.NewInt(int64(fromBlock)),
 			ToBlock:   big.NewInt(int64(toBlock)),
 			Addresses: []common.Address{common.HexToAddress(token.Address)},
@@ -112,7 +98,7 @@ func (token *ERC20) ListTransfersOfParticipants(
 					amount := common.BytesToHash(event.Data).Big()
 					txId := event.TxHash.Hex()
 					block := big.NewInt(int64(event.BlockNumber))
-					timestamp, err := GetCachedBlockTimestamp(token.W3, cache, event.BlockNumber)
+					timestamp, err := GetCachedBlockTimestamp(token.client, cache, event.BlockNumber)
 					if err != nil {
 						slog.Warn(fmt.Sprintf("Cannot fetch from cache or blockchain info on block %d timestamp: %s", event.BlockNumber, err.Error()))
 						continue
@@ -140,27 +126,14 @@ var (
 	BadSymbolValue   error = errors.New("Bad symbol of ERC20 contract")
 )
 
-func CreateERC20(w3 *web3.Web3, address string, symbol string) (*ERC20, error) {
-	contract, err := CreateContract(w3, "abi/ERC20.json", address)
+func CreateERC20(client *ethclient.Client, address string, symbol string) (*ERC20, error) {
+	caller, err := NewIERC20Caller(common.HexToAddress(address), client)
 	if err != nil {
 		return nil, err
 	}
-	decimalsRaw, err := contract.Call("decimals")
+	decimals, err := caller.Decimals(&bind.CallOpts{})
 	if err != nil {
 		return nil, err
 	}
-	var decimals *big.Int
-	var success bool
-	if decimals, success = decimalsRaw.(*big.Int); !success {
-		return nil, BadDecimalsValue
-	}
-	nameRaw, err := contract.Call("name")
-	if err != nil {
-		return nil, err
-	}
-	var name string
-	if name, success = nameRaw.(string); !success {
-		return nil, BadNameValue
-	}
-	return &ERC20{W3: w3, Address: address, Contract: *contract, Decimals: *decimals, Name: name, Symbol: symbol}, nil
+	return &ERC20{client: client, Address: address, Decimals: *decimals, Symbol: symbol}, nil
 }

@@ -1,13 +1,14 @@
 package trade
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
 
 	"log/slog"
 
-	"github.com/chenzhijie/go-web3"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -25,7 +26,12 @@ func FetchTransfersFromNode(
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
 	for _, token := range tokens {
-		transfers, err := token.ListTransfersOfParticipants(config.BlockchainUrl, chainId, participants, startFromBlock, endInBlock, cache)
+		transfers, err := token.ListTransfersOfParticipants(
+			chainId,
+			participants,
+			startFromBlock,
+			endInBlock,
+			cache)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
 			continue
@@ -51,13 +57,13 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		return
 	}
 
-	web3, err := web3.NewWeb3(config.BlockchainUrl)
+	client, err := ethclient.Dial(config.BlockchainUrl)
 	if err != nil {
-		slog.Warn(fmt.Sprintf("Cannot connect to blockchain: %e", err))
+		slog.Error(fmt.Sprintf("Failed to connect to Ethereum node: %s", err.Error()))
 		return
 	}
 
-	chainId, err := web3.Eth.ChainID()
+	chainId, err := client.ChainID(context.Background())
 	if err != nil {
 		slog.Warn("Cannot fetch chain id")
 		return
@@ -70,7 +76,7 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		return
 	}
 
-	currentBlockchainBlock, err := web3.Eth.GetBlockNumber()
+	currentBlockchainBlock, err := client.BlockNumber(context.Background())
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %s", err.Error()))
 		return
@@ -85,7 +91,7 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 
 	tokens := make([]ERC20, 0, len(tokensFromDB))
 	for _, token := range tokensFromDB {
-		erc20, err := CreateERC20(web3, token.Address, token.Symbol)
+		erc20, err := NewERC20(client, token.Address, token.Symbol)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot create token %s: %e", token.Address, err))
 			continue
@@ -96,11 +102,8 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 	var participants []string
 	var minBlockOfWalletsToFetchFromNode uint64 = math.MaxUint64
 	for _, wallet := range trackedWallets {
-		// criteriaWalletIsOutDated := wallet.LastBlock < currentBlockchainBlock-config.BlocksInterval
-		// if criteriaWalletIsOutDated {
-			slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
-			participants = append(participants, wallet.Address)
-		// } 
+		slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
+		participants = append(participants, wallet.Address)
 		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
 	}
 	if len(participants) > 0 {
