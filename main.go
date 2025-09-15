@@ -1,34 +1,62 @@
 package main
 
 import (
+	"context"
+	"os"
+
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/urfave/cli/v3"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+func Api(db *gorm.DB, cache *redis.Client) {
+	router := gin.Default()
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"*"}
+	router.Use(cors.New(config))
+	trade.CreateApi(router, db, cache)
+	router.Run()
+}
 
 func main() {
 	db, err := gorm.Open(postgres.Open("postgresql://user:pass@localhost:5432/db"), &gorm.Config{})
 	if err != nil {
 		panic("Cannot start db connection" + err.Error())
 	}
-	db.AutoMigrate(&trade.Deal{}, &trade.ERC20Transfer{}, &trade.Worker{}, &trade.Token{}, &trade.TrackedWallet{})
-	router := gin.Default()
 	redis := trade.NewRedisClient()
-	trade.CreateApi(router, db, redis)
-	// worker := trade.Worker{BlockchainUrl: "http://localhost:8545", BlocksInterval: 1000}
-	// db.Create(&worker)
-	// db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28", LastBlock: 23152597})
-	// db.Create(&trade.Token{ChainId: "1", Address: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", Symbol: "ETH"})
-	// trade.Cycle(db, redis, 1)
-
-
-	// dealsIncome := []trade.Deal{}
-	// err = db.Preload("BlockchainTransfer").Find(&dealsIncome, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Sender: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"}}).Error
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	// fmt.Println(len(dealsIncome))
-
-	router.Run()
+	db.AutoMigrate(&trade.Deal{}, &trade.ERC20Transfer{}, &trade.Worker{}, &trade.Token{}, &trade.TrackedWallet{}, &trade.Chain{})
+	cmd := &cli.Command{
+		Commands: []*cli.Command{
+			{
+				Name:  "serve",
+				Usage: "Run backend server with API",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					Api(db, redis)
+					return nil
+				},
+			},
+			{
+				Name:  "load",
+				Usage: "Load fixture to database",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					Fixture(db)
+					return nil
+				},
+			},
+			{
+				Name:  "index",
+				Usage: "Index events",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					trade.Cycle(db, redis, 1)
+					return nil
+				},
+			},
+		}}
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		panic("Cannot parse command " + err.Error())
+	}
 }

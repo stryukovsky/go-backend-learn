@@ -45,6 +45,10 @@ func (br DBNumeric) Value() (driver.Value, error) {
 	return br.Rat.FloatString(20), nil
 }
 
+func (br DBNumeric) MarshalJSON() ([]byte, error) {
+	return []byte("\"" + br.Rat.FloatString(5) + "\""), nil
+}
+
 func (DBNumeric) GormDataType() string {
 	return "numeric" // PostgreSQL numeric type
 }
@@ -95,11 +99,17 @@ func (DBInt) GormDataType() string {
 
 type Deal struct {
 	gorm.Model
-	Price                DBNumeric `json:"price" binding:"required"`
+	Price                DBNumeric `json:"price" binding:"required" format:""`
 	VolumeTokens         DBNumeric `json:"volumeTokens" binding:"required"`
 	VolumeUSD            DBNumeric `json:"volumeUSD" binding:"required"`
 	BlockchainTransferID int
 	BlockchainTransfer   ERC20Transfer `json:"blockchainTransfer" binding:"required"`
+}
+
+type Chain struct {
+	gorm.Model
+	Name    string `json:"name" binding:"required"`
+	ChainId string `json:"ChainId" binding:"required"`
 }
 
 type ERC20Transfer struct {
@@ -147,4 +157,3 @@ type TrackedWallet struct {
 	ChainId   string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
 	LastBlock uint64 `json:"lastBlock" binding:"required"`
 }
-

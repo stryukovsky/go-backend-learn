@@ -24,10 +24,6 @@ type ERC20 struct {
 	Symbol   string
 }
 
-var (
-	BadBalance error = errors.New("Bad balance of ERC20 contract")
-)
-
 func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
 	balance, err := token.caller.BalanceOf(&bind.CallOpts{}, common.HexToAddress(recipient))
 	if err != nil {

@@ -1,0 +1,527 @@
+openapi: 3.0.3
+info:
+  title: Trade API
+  description: API for managing blockchain trades, wallets, and balances across multiple chains
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.example.com
+    description: Production server
+
+paths:
+  /api/wallets:
+    get:
+      summary: List all tracked wallets
+      description: Retrieve a list of all tracked wallets across all chains
+      operationId: listWallets
+      tags:
+        - Wallets
+      responses:
+        '200':
+          description: Successfully retrieved wallets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackedWallet'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/chains:
+    get:
+      summary: List all blockchain chains
+      description: Retrieve a list of all supported blockchain chains
+      operationId: listChains
+      tags:
+        - Chains
+      responses:
+        '200':
+          description: Successfully retrieved chains
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Chain'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/chain/{chainId}/wallets:
+    get:
+      summary: Get wallets on specific chain
+      description: Retrieve all tracked wallets for a specific blockchain chain
+      operationId: getWalletsOnChain
+      tags:
+        - Wallets
+        - Chains
+      parameters:
+        - name: chainId
+          in: path
+          required: true
+          description: The blockchain chain ID
+          schema:
+            type: string
+          example: "1"
+      responses:
+        '200':
+          description: Successfully retrieved wallets for the chain
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrackedWallet'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/balance/chainAndWallet/{chainId}/{wallet}:
+    get:
+      summary: Get wallet balance on specific chain
+      description: Retrieve the balance of a specific wallet on a specific blockchain chain
+      operationId: getBalanceByWalletAndChain
+      tags:
+        - Balances
+        - Wallets
+      parameters:
+        - name: chainId
+          in: path
+          required: true
+          description: The blockchain chain ID
+          schema:
+            type: string
+          example: "1"
+        - name: wallet
+          in: path
+          required: true
+          description: The wallet address (Ethereum address format)
+          schema:
+            type: string
+            pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+      responses:
+        '200':
+          description: Successfully retrieved wallet balance on chain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceOnChain'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/balance/wallet/{wallet}:
+    get:
+      summary: Get wallet balance across all chains
+      description: Retrieve the total balance of a wallet across all supported blockchain chains
+      operationId: getBalanceByWallet
+      tags:
+        - Balances
+        - Wallets
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          description: The wallet address (Ethereum address format)
+          schema:
+            type: string
+            pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+      responses:
+        '200':
+          description: Successfully retrieved wallet balance across all chains
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceAcrossAllChains'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/deals/{wallet}:
+    get:
+      summary: Get deals by wallet
+      description: Retrieve all deals (incoming and outgoing) for a specific wallet
+      operationId: getDealsByWallet
+      tags:
+        - Deals
+        - Wallets
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          description: The wallet address (Ethereum address format)
+          schema:
+            type: string
+            pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+      responses:
+        '200':
+          description: Successfully retrieved deals for wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealsByWallet'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    TrackedWallet:
+      type: object
+      required:
+        - address
+        - chainId
+        - lastBlock
+      properties:
+        ID:
+          type: integer
+          format: int64
+          description: Auto-generated unique identifier
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the wallet was created
+        UpdatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the wallet was last updated
+        DeletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the wallet was deleted (soft delete)
+        address:
+          type: string
+          description: The wallet address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+        chainId:
+          type: string
+          description: The blockchain chain ID
+          example: "1"
+        lastBlock:
+          type: integer
+          format: int64
+          description: The last processed block number for this wallet
+          example: 18500000
+
+    Chain:
+      type: object
+      required:
+        - name
+        - ChainId
+      properties:
+        ID:
+          type: integer
+          format: int64
+          description: Auto-generated unique identifier
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the chain was created
+        UpdatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the chain was last updated
+        DeletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the chain was deleted (soft delete)
+        name:
+          type: string
+          description: The name of the blockchain
+          example: "Ethereum Mainnet"
+        ChainId:
+          type: string
+          description: The chain identifier
+          example: "1"
+
+    BalanceAcrossAllChains:
+      type: object
+      required:
+        - address
+        - balance
+      properties:
+        address:
+          type: string
+          description: The wallet address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+        balance:
+          type: string
+          description: Total balance across all chains (as string to handle big numbers)
+          example: "1000000000000000000000"
+
+    BalanceOnChain:
+      type: object
+      required:
+        - chainId
+        - address
+        - balance
+      properties:
+        chainId:
+          type: string
+          description: The blockchain chain ID
+          example: "1"
+        address:
+          type: string
+          description: The wallet address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+        balance:
+          type: string
+          description: Balance on specific chain (as string to handle big numbers)
+          example: "500000000000000000000"
+
+    DealsByWallet:
+      type: object
+      required:
+        - address
+        - dealsIn
+        - dealsOut
+      properties:
+        address:
+          type: string
+          description: The wallet address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+        dealsIn:
+          type: array
+          description: Deals where this wallet is the recipient
+          items:
+            $ref: '#/components/schemas/Deal'
+        dealsOut:
+          type: array
+          description: Deals where this wallet is the sender
+          items:
+            $ref: '#/components/schemas/Deal'
+
+    Deal:
+      type: object
+      required:
+        - price
+        - volumeTokens
+        - volumeUSD
+        - blockchainTransfer
+      properties:
+        ID:
+          type: integer
+          format: int64
+          description: Auto-generated unique identifier
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the deal was created
+        UpdatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the deal was last updated
+        DeletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the deal was deleted (soft delete)
+        price:
+          type: string
+          description: Price of the deal (as string to handle big decimal numbers)
+          example: "1500.50"
+        volumeTokens:
+          type: string
+          description: Volume in tokens (as string to handle big decimal numbers)
+          example: "100.25"
+        volumeUSD:
+          type: string
+          description: Volume in USD (as string to handle big decimal numbers)
+          example: "150025.75"
+        BlockchainTransferID:
+          type: integer
+          format: int64
+          description: Foreign key to the blockchain transfer
+          example: 1
+        blockchainTransfer:
+          $ref: '#/components/schemas/ERC20Transfer'
+
+    ERC20Transfer:
+      type: object
+      required:
+        - tokenAddress
+        - sender
+        - recipient
+        - amount
+        - blockNumber
+        - chainId
+        - timestamp
+        - txId
+      properties:
+        ID:
+          type: integer
+          format: int64
+          description: Auto-generated unique identifier
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transfer was created
+        UpdatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transfer was last updated
+        DeletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the transfer was deleted (soft delete)
+        tokenAddress:
+          type: string
+          description: The ERC20 token contract address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0xA0b86a33E6432fF4e4DC3B4B4A6A70ad97B9B0A8"
+        sender:
+          type: string
+          description: The sender wallet address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b8D5C5b7d8B0b4f8e"
+        recipient:
+          type: string
+          description: The recipient wallet address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x8ba1f109551bD432803012645Hac136c3c0efb90"
+        amount:
+          type: string
+          description: Transfer amount (as string to handle big integer numbers)
+          example: "1000000000000000000000"
+        blockNumber:
+          type: string
+          description: Block number where the transfer occurred (as string to handle big numbers)
+          example: "18500000"
+        chainId:
+          type: string
+          description: The blockchain chain ID
+          example: "1"
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the transfer
+          example: "2023-11-15T10:30:00Z"
+        txId:
+          type: string
+          description: Unique transaction identifier
+          example: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+    Token:
+      type: object
+      required:
+        - chainId
+        - symbol
+        - address
+        - decimals
+      properties:
+        ID:
+          type: integer
+          format: int64
+          description: Auto-generated unique identifier
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the token was created
+        UpdatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the token was last updated
+        DeletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the token was deleted (soft delete)
+        chainId:
+          type: string
+          description: The blockchain chain ID
+          example: "1"
+        symbol:
+          type: string
+          description: Token symbol
+          example: "USDT"
+        address:
+          type: string
+          description: Token contract address
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0xA0b86a33E6432fF4e4DC3B4B4A6A70ad97B9B0A8"
+        decimals:
+          type: string
+          description: Token decimals (as string to handle big numbers)
+          example: "18"
+
+    Worker:
+      type: object
+      required:
+        - blockchainUrl
+        - blocksInterval
+      properties:
+        ID:
+          type: integer
+          format: int64
+          description: Auto-generated unique identifier
+          example: 1
+        CreatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the worker was created
+        UpdatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the worker was last updated
+        DeletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the worker was deleted (soft delete)
+        blockchainUrl:
+          type: string
+          format: uri
+          description: URL of the blockchain node
+          example: "https://mainnet.infura.io/v3/your-project-id"
+        blocksInterval:
+          type: integer
+          format: int64
+          description: Interval in blocks for processing
+          example: 100
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Internal server error occurred"
+
+  responses:
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Database connection failed"
+
+tags:
+  - name: Wallets
+    description: Operations related to wallet management
+  - name: Chains
+    description: Operations related to blockchain chains
+  - name: Balances
+    description: Operations related to wallet balances
+  - name: Deals
+    description: Operations related to trading deals

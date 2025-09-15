@@ -55,39 +55,6 @@ func NewDealsByWallet(wallet string, dealsIn []Deal, dealsOut []Deal) *DealsByWa
 	}
 }
 
-func AddDeal(ctx *gin.Context, db *gorm.DB) {
-	var deal Deal
-	if err := ctx.ShouldBindJSON(&deal); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	tx := db.Create(&deal)
-	if tx.Error != nil {
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": "cannot add"})
-	} else {
-		ctx.JSON(http.StatusOK, gin.H{"status": "success"})
-	}
-}
-
-func GetDeal(ctx *gin.Context, db *gorm.DB) {
-	id := ctx.Param("id")
-	var deal Deal
-	if err := db.First(&deal, id).Error; err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "deal not found"})
-		return
-	}
-	ctx.JSON(http.StatusOK, deal)
-}
-
-func ListDeals(ctx *gin.Context, db *gorm.DB) {
-	var items []Deal
-	if tx := db.Find(&items); tx.Error != nil {
-		ctx.JSON(http.StatusBadGateway, gin.H{"error": "cannot list"})
-	} else {
-		ctx.JSON(http.StatusOK, items)
-	}
-}
-
 func BalanceByWallet(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
 	balance, err := GetCachedBalanceOfWallet(db, rdb, walletAddress)
@@ -131,6 +98,16 @@ func ListWallets(ctx *gin.Context, db *gorm.DB) {
 	ctx.JSON(http.StatusOK, wallets)
 }
 
+func ListChains(ctx *gin.Context, db *gorm.DB) {
+	chains := []Chain{}
+	err := db.Find(&chains).Error
+	if err != nil {
+		apiErr(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, chains)
+}
+
 func ListDealsByWallet(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	dealsAsSender := []Deal{}
@@ -151,14 +128,11 @@ func ListDealsByWallet(ctx *gin.Context, db *gorm.DB) {
 }
 
 func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
-	router.POST("/api/deal", func(ctx *gin.Context) {
-		AddDeal(ctx, db)
+	router.GET("/api/wallets", func(ctx *gin.Context) {
+		ListWallets(ctx, db)
 	})
-	router.GET("/api/deal", func(ctx *gin.Context) {
-		ListDeals(ctx, db)
-	})
-	router.GET("/api/deal/:id", func(ctx *gin.Context) {
-		GetDeal(ctx, db)
+	router.GET("/api/chains", func(ctx *gin.Context) {
+		ListChains(ctx, db)
 	})
 	router.GET("/api/chain/:chainId/wallets", func(ctx *gin.Context) {
 		GetWalletsOnChain(ctx, db)

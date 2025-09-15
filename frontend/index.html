@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trade API Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.4.0/axios.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        color: #333;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+        color: white;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .card {
+        background: white;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+      }
+
+      .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+      }
+
+      .card h2 {
+        color: #2d3748;
+        margin-bottom: 20px;
+        font-size: 1.5rem;
+        font-weight: 600;
+      }
+
+      .select-wrapper {
+        position: relative;
+        margin-bottom: 20px;
+      }
+
+      select {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 16px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .wallet-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      .wallet-item {
+        padding: 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: #f8fafc;
+      }
+
+      .wallet-item:hover {
+        border-color: #667eea;
+        background: #f1f5f9;
+        transform: translateY(-1px);
+      }
+
+      .wallet-item.selected {
+        border-color: #667eea;
+        background: #ebf4ff;
+      }
+
+      .wallet-address {
+        font-family: "Courier New", monospace;
+        font-size: 0.9rem;
+        color: #4a5568;
+        word-break: break-all;
+        margin-bottom: 8px;
+      }
+
+      .wallet-info {
+        font-size: 0.85rem;
+        color: #718096;
+      }
+
+      .balance-display {
+        background: linear-gradient(135deg, #48bb78, #38a169);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .balance-amount {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+      }
+
+      .balance-label {
+        font-size: 1rem;
+        opacity: 0.9;
+      }
+
+      .deals-section {
+        margin-top: 30px;
+      }
+
+      .deals-tabs {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #e2e8f0;
+      }
+
+      .tab-button {
+        padding: 12px 24px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 500;
+        color: #718096;
+        transition: all 0.3s ease;
+        border-bottom: 2px solid transparent;
+      }
+
+      .tab-button.active {
+        color: #667eea;
+        border-bottom-color: #667eea;
+      }
+
+      .deals-list {
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      .deal-item {
+        padding: 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: #fafafa;
+      }
+
+      .deal-item:hover {
+        border-color: #667eea;
+        background: white;
+        transform: translateX(4px);
+      }
+
+      .deal-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .deal-price {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #2d3748;
+      }
+
+      .deal-volume {
+        font-size: 0.9rem;
+        color: #718096;
+      }
+
+      .deal-details {
+        font-size: 0.85rem;
+        color: #a0aec0;
+      }
+
+      .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 16px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        position: relative;
+      }
+
+      .modal-close {
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #718096;
+      }
+
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .detail-row:last-child {
+        border-bottom: none;
+      }
+
+      .detail-label {
+        font-weight: 600;
+        color: #4a5568;
+      }
+
+      .detail-value {
+        color: #2d3748;
+        font-family: "Courier New", monospace;
+        word-break: break-all;
+        text-align: right;
+        max-width: 60%;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #718096;
+      }
+
+      .spinner {
+        display: inline-block;
+        width: 32px;
+        height: 32px;
+        border: 3px solid #e2e8f0;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 16px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error {
+        background: #fed7d7;
+        color: #c53030;
+        padding: 16px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #718096;
+        font-style: italic;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          padding: 10px;
+        }
+
+        .wallet-list {
+          grid-template-columns: 1fr;
+        }
+
+        .header h1 {
+          font-size: 2rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="container">
+        <div class="header">
+          <h1>🚀 Trade API Dashboard</h1>
+          <p>
+            Manage your blockchain wallets, track balances, and monitor deals
+          </p>
+        </div>
+
+        <!-- Error Display -->
+        <div v-if="error" class="error">{{ error }}</div>
+
+        <!-- Step 1: Chain Selection -->
+        <div class="card">
+          <h2>📊 Select Blockchain</h2>
+          <div class="select-wrapper">
+            <select v-model="selectedChain" @change="onChainSelect">
+              <option value="">Choose a blockchain...</option>
+              <option
+                v-for="chain in chains"
+                :key="chain.ChainId"
+                :value="chain"
+              >
+                {{ chain.name }} (ID: {{ chain.ChainId }})
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Step 2: Wallet Selection -->
+        <div v-if="selectedChain && wallets.length > 0" class="card">
+          <h2>💼 Your Wallets on {{ selectedChain.name }}</h2>
+          <div class="wallet-list">
+            <div
+              v-for="wallet in wallets"
+              :key="wallet.address"
+              class="wallet-item"
+              :class="{ selected: selectedWallet?.address === wallet.address }"
+              @click="selectWallet(wallet)"
+            >
+              <div class="wallet-address">{{ wallet.address }}</div>
+              <div class="wallet-info">Last Block: {{ wallet.lastBlock }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="loading" class="card">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+          </div>
+        </div>
+
+        <!-- Step 3: Balance Display -->
+        <div v-if="selectedWallet && balance !== null" class="card">
+          <h2>💰 Wallet Balance</h2>
+          <div class="balance-display">
+            <div class="balance-amount">
+              {{ formatBalance(balance.balance) }}
+            </div>
+            <div class="balance-label">Tokens on {{ selectedChain.name }}</div>
+          </div>
+        </div>
+
+        <!-- Step 4: Deals Display -->
+        <div v-if="selectedWallet && deals" class="card deals-section">
+          <h2>📈 Trading Activity</h2>
+          <div class="deals-tabs">
+            <button
+              class="tab-button"
+              :class="{ active: activeTab === 'in' }"
+              @click="activeTab = 'in'"
+            >
+              Incoming ({{ deals.dealsIn?.length || 0 }})
+            </button>
+            <button
+              class="tab-button"
+              :class="{ active: activeTab === 'out' }"
+              @click="activeTab = 'out'"
+            >
+              Outgoing ({{ deals.dealsOut?.length || 0 }})
+            </button>
+          </div>
+
+          <div class="deals-list">
+            <div v-if="currentDeals.length === 0" class="empty-state">
+              No {{ activeTab === 'in' ? 'incoming' : 'outgoing' }} deals found
+            </div>
+            <div
+              v-else
+              v-for="deal in currentDeals"
+              :key="deal.ID"
+              class="deal-item"
+              @click="showDealDetails(deal)"
+            >
+              <div class="deal-header">
+                <div class="deal-price">${{ deal.price }}</div>
+                <div class="deal-volume">{{ deal.volumeTokens }} tokens</div>
+              </div>
+              <div class="deal-details">
+                Volume: ${{ deal.volumeUSD }} | Block: {{
+                deal.blockchainTransfer.blockNumber }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Deal Details Modal -->
+      <div v-if="selectedDeal" class="modal" @click.self="closeDealDetails">
+        <div class="modal-content">
+          <button class="modal-close" @click="closeDealDetails">&times;</button>
+          <h2>📋 Deal Details</h2>
+
+          <div class="detail-row">
+            <span class="detail-label">Deal ID:</span>
+            <span class="detail-value">{{ selectedDeal.ID }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Price:</span>
+            <span class="detail-value">${{ selectedDeal.price }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Volume (Tokens):</span>
+            <span class="detail-value">{{ selectedDeal.volumeTokens }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Volume (USD):</span>
+            <span class="detail-value">${{ selectedDeal.volumeUSD }}</span>
+          </div>
+
+          <h3 style="margin: 20px 0 10px 0">🔗 Blockchain Transfer</h3>
+          <div class="detail-row">
+            <span class="detail-label">Token Address:</span>
+            <span class="detail-value"
+              >{{ selectedDeal.blockchainTransfer.tokenAddress }}</span
+            >
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Sender:</span>
+            <span class="detail-value"
+              >{{ selectedDeal.blockchainTransfer.sender }}</span
+            >
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Recipient:</span>
+            <span class="detail-value"
+              >{{ selectedDeal.blockchainTransfer.recipient }}</span
+            >
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Amount:</span>
+            <span class="detail-value"
+              >{{ selectedDeal.blockchainTransfer.amount }}</span
+            >
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Block Number:</span>
+            <span class="detail-value"
+              >{{ selectedDeal.blockchainTransfer.blockNumber }}</span
+            >
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Chain ID:</span>
+            <span class="detail-value"
+              >{{ selectedDeal.blockchainTransfer.chainId }}</span
+            >
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Transaction ID:</span>
+            <span class="detail-value"
+              >{{ selectedDeal.blockchainTransfer.txId }}</span
+            >
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Timestamp:</span>
+            <span class="detail-value"
+              >{{ formatDate(selectedDeal.blockchainTransfer.timestamp) }}</span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { createApp } = Vue;
+
+      createApp({
+        data() {
+          return {
+            chains: [],
+            selectedChain: "",
+            wallets: [],
+            selectedWallet: null,
+            balance: null,
+            deals: null,
+            selectedDeal: null,
+            activeTab: "in",
+            loading: false,
+            error: null,
+            apiBaseUrl: "http://localhost:8080",
+          };
+        },
+
+        computed: {
+          currentDeals() {
+            if (!this.deals) return [];
+            return this.activeTab === "in"
+              ? this.deals.dealsIn
+              : this.deals.dealsOut;
+          },
+        },
+
+        async mounted() {
+          await this.loadChains();
+        },
+
+        methods: {
+          async loadChains() {
+            try {
+              this.loading = true;
+              this.error = null;
+              const response = await axios.get(`${this.apiBaseUrl}/api/chains`);
+              this.chains = response.data;
+            } catch (error) {
+              this.error =
+                "Failed to load chains: " +
+                (error.response?.data?.error || error.message);
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async onChainSelect() {
+            if (!this.selectedChain) {
+              this.wallets = [];
+              this.selectedWallet = null;
+              this.balance = null;
+              this.deals = null;
+              return;
+            }
+            await this.loadWallets();
+          },
+
+          async loadWallets() {
+            try {
+              this.loading = true;
+              this.error = null;
+              this.selectedWallet = null;
+              this.balance = null;
+              this.deals = null;
+
+              const response = await axios.get(
+                `${this.apiBaseUrl}/api/chain/${this.selectedChain.ChainId}/wallets`,
+              );
+              this.wallets = response.data;
+            } catch (error) {
+              this.error =
+                "Failed to load wallets: " +
+                (error.response?.data?.error || error.message);
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async selectWallet(wallet) {
+            this.selectedWallet = wallet;
+            this.balance = null;
+            this.deals = null;
+            this.activeTab = "in";
+
+            await Promise.all([this.loadBalance(), this.loadDeals()]);
+          },
+
+          async loadBalance() {
+            try {
+              this.loading = true;
+              this.error = null;
+
+              const response = await axios.get(
+                `${this.apiBaseUrl}/api/balance/chainAndWallet/${this.selectedChain.ChainId}/${this.selectedWallet.address}`,
+              );
+              this.balance = response.data;
+            } catch (error) {
+              this.error =
+                "Failed to load balance: " +
+                (error.response?.data?.error || error.message);
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async loadDeals() {
+            try {
+              this.error = null;
+
+              const response = await axios.get(
+                `${this.apiBaseUrl}/api/deals/${this.selectedWallet.address}`,
+              );
+              this.deals = response.data;
+            } catch (error) {
+              this.error =
+                "Failed to load deals: " +
+                (error.response?.data?.error || error.message);
+            }
+          },
+
+          showDealDetails(deal) {
+            this.selectedDeal = deal;
+          },
+
+          closeDealDetails() {
+            this.selectedDeal = null;
+          },
+
+          formatBalance(balance) {
+            // Convert Wei to Ether (assuming 18 decimals)
+            const balanceNum = parseFloat(balance);
+            if (balanceNum >= 1e18) {
+              return (balanceNum / 1e18).toFixed(4);
+            }
+            return balanceNum.toLocaleString();
+          },
+
+          formatDate(dateString) {
+            return new Date(dateString).toLocaleString();
+          },
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
