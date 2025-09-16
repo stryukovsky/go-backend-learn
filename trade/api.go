@@ -1,6 +1,7 @@
 package trade
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -31,6 +32,10 @@ type BalanceOnChain struct {
 	ChainId string `json:"chainId" binding:"required"`
 	Address string `json:"address" binding:"required"`
 	Balance string `json:"balance" binding:"required"`
+}
+
+func (b *BalanceOnChain) MarshalBinary() ([]byte, error) {
+	return json.Marshal(b)
 }
 
 func NewBalanceOnChain(chainId string, address string, balance string) *BalanceOnChain {

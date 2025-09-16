@@ -33,16 +33,16 @@ func FetchTransfersFromNode(
 			endInBlock,
 			cache)
 		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Symbol, err.Error()))
+			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Info.Symbol, err.Error()))
 			continue
 		}
-		slog.Info(fmt.Sprintf("[%s] Found %d transfers where tracked wallets participated", token.Symbol, len(transfers)))
+		slog.Info(fmt.Sprintf("[%s] Found %d transfers where tracked wallets participated", token.Info.Symbol, len(transfers)))
 		for _, transfer := range transfers {
 			deal, err := CreateDeal(cache, transfer, token)
 			if err != nil {
-				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %s", token.Symbol, transfer.TxId, err.Error()))
+				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %s", token.Info.Symbol, transfer.TxId, err.Error()))
 			} else {
-				slog.Info(fmt.Sprintf("[%s] Found deal with volume $ %s", token.Symbol, deal.VolumeUSD.FloatString(5)))
+				slog.Info(fmt.Sprintf("[%s] Found deal with volume $ %s", token.Info.Symbol, deal.VolumeUSD.FloatString(5)))
 				db.Save(deal)
 			}
 		}
@@ -91,7 +91,7 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 
 	tokens := make([]ERC20, 0, len(tokensFromDB))
 	for _, token := range tokensFromDB {
-		erc20, err := NewERC20(client, token.Address, token.Symbol)
+		erc20, err := NewERC20(client, token)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot create token %s: %e", token.Address, err))
 			continue

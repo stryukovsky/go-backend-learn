@@ -19,9 +19,7 @@ import (
 type ERC20 struct {
 	client *ethclient.Client
 	caller *IERC20Caller
-	Address  string
-	Decimals big.Int
-	Symbol   string
+	Info   Token
 }
 
 func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
@@ -51,7 +49,7 @@ func (token *ERC20) ListTransfersOfParticipants(
 		token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 			FromBlock: big.NewInt(int64(fromBlock)),
 			ToBlock:   big.NewInt(int64(toBlock)),
-			Addresses: []common.Address{common.HexToAddress(token.Address)},
+			Addresses: []common.Address{common.HexToAddress(token.Info.Address)},
 			Topics: [][]common.Hash{
 				{common.HexToHash(TransferTopic)},
 				formattedParticipants,
@@ -65,7 +63,7 @@ func (token *ERC20) ListTransfersOfParticipants(
 		token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 			FromBlock: big.NewInt(int64(fromBlock)),
 			ToBlock:   big.NewInt(int64(toBlock)),
-			Addresses: []common.Address{common.HexToAddress(token.Address)},
+			Addresses: []common.Address{common.HexToAddress(token.Info.Address)},
 			Topics: [][]common.Hash{
 				{common.HexToHash(TransferTopic)},
 				{},
@@ -99,7 +97,7 @@ func (token *ERC20) ListTransfersOfParticipants(
 						slog.Warn(fmt.Sprintf("Cannot fetch from cache or blockchain info on block %d timestamp: %s", event.BlockNumber, err.Error()))
 						continue
 					}
-					transfer := NewERC20Transfer(token.Address, sender, recipient, amount, block, chainId, timestamp, txId)
+					transfer := NewERC20Transfer(token.Info.Address, sender, recipient, amount, block, chainId, timestamp, txId)
 					resultCh <- transfer
 				}
 			}()
@@ -122,14 +120,10 @@ var (
 	BadSymbolValue   error = errors.New("Bad symbol of ERC20 contract")
 )
 
-func NewERC20(client *ethclient.Client, address string, symbol string) (*ERC20, error) {
-	caller, err := NewIERC20Caller(common.HexToAddress(address), client)
+func NewERC20(client *ethclient.Client, token Token) (*ERC20, error) {
+	caller, err := NewIERC20Caller(common.HexToAddress(token.Address), client)
 	if err != nil {
 		return nil, err
 	}
-	decimals, err := caller.Decimals(&bind.CallOpts{})
-	if err != nil {
-		return nil, err
-	}
-	return &ERC20{client: client, Address: address, Decimals: *decimals, Symbol: symbol}, nil
+	return &ERC20{client: client, caller: caller, Info: token}, nil
 }
