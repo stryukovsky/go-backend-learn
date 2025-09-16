@@ -16,7 +16,7 @@
       body {
         font-family:
           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        <!-- background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -->
         min-height: 100vh;
         color: #333;
       }
@@ -153,48 +153,108 @@
         margin-top: 30px;
       }
 
-      .deals-tabs {
+      .deals-table {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+      }
+
+      .deals-column {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 20px;
+        min-height: 400px;
+      }
+
+      .deals-column-header {
         display: flex;
-        margin-bottom: 20px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
         border-bottom: 2px solid #e2e8f0;
       }
 
-      .tab-button {
-        padding: 12px 24px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1rem;
-        font-weight: 500;
-        color: #718096;
-        transition: all 0.3s ease;
-        border-bottom: 2px solid transparent;
+      .deals-column-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #2d3748;
       }
 
-      .tab-button.active {
-        color: #667eea;
-        border-bottom-color: #667eea;
+      .deals-count {
+        background: #667eea;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-size: 0.85rem;
+        font-weight: 500;
+      }
+
+      .deals-column.incoming .deals-count {
+        background: #48bb78;
+      }
+
+      .deals-column.outgoing .deals-count {
+        background: #ed8936;
       }
 
       .deals-list {
-        max-height: 400px;
+        max-height: 360px;
         overflow-y: auto;
+        padding-right: 8px;
+      }
+
+      .deals-list::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .deals-list::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+      }
+
+      .deals-list::-webkit-scrollbar-thumb {
+        background: #cbd5e0;
+        border-radius: 3px;
+      }
+
+      .deals-list::-webkit-scrollbar-thumb:hover {
+        background: #a0aec0;
       }
 
       .deal-item {
-        padding: 16px;
+        padding: 14px 16px;
         border: 1px solid #e2e8f0;
         border-radius: 8px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         cursor: pointer;
         transition: all 0.3s ease;
-        background: #fafafa;
+        background: white;
+        border-left: 4px solid transparent;
       }
 
       .deal-item:hover {
         border-color: #667eea;
-        background: white;
-        transform: translateX(4px);
+        border-left-color: #667eea;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      .deals-column.incoming .deal-item {
+        border-left-color: #48bb78;
+      }
+
+      .deals-column.outgoing .deal-item {
+        border-left-color: #ed8936;
+      }
+
+      .deals-column.incoming .deal-item:hover {
+        border-left-color: #38a169;
+      }
+
+      .deals-column.outgoing .deal-item:hover {
+        border-left-color: #dd6b20;
       }
 
       .deal-header {
@@ -329,6 +389,20 @@
         .header h1 {
           font-size: 2rem;
         }
+
+        .deals-table {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+
+        .deals-column {
+          min-height: 300px;
+        }
+
+        .modal-content {
+          width: 95%;
+          padding: 20px;
+        }
       }
     </style>
   </head>
@@ -401,41 +475,78 @@
         <!-- Step 4: Deals Display -->
         <div v-if="selectedWallet && deals" class="card deals-section">
           <h2>📈 Trading Activity</h2>
-          <div class="deals-tabs">
-            <button
-              class="tab-button"
-              :class="{ active: activeTab === 'in' }"
-              @click="activeTab = 'in'"
-            >
-              Incoming ({{ deals.dealsIn?.length || 0 }})
-            </button>
-            <button
-              class="tab-button"
-              :class="{ active: activeTab === 'out' }"
-              @click="activeTab = 'out'"
-            >
-              Outgoing ({{ deals.dealsOut?.length || 0 }})
-            </button>
-          </div>
-
-          <div class="deals-list">
-            <div v-if="currentDeals.length === 0" class="empty-state">
-              No {{ activeTab === 'in' ? 'incoming' : 'outgoing' }} deals found
-            </div>
-            <div
-              v-else
-              v-for="deal in currentDeals"
-              :key="deal.ID"
-              class="deal-item"
-              @click="showDealDetails(deal)"
-            >
-              <div class="deal-header">
-                <div class="deal-price">${{ deal.price }}</div>
-                <div class="deal-volume">{{ deal.volumeTokens }} tokens</div>
+          <div class="deals-table">
+            <!-- Incoming Deals Column -->
+            <div class="deals-column incoming">
+              <div class="deals-column-header">
+                <div class="deals-column-title">📥 Incoming Deals</div>
+                <div class="deals-count">{{ deals.dealsIn?.length || 0 }}</div>
               </div>
-              <div class="deal-details">
-                Volume: ${{ deal.volumeUSD }} | Block: {{
-                deal.blockchainTransfer.blockNumber }}
+              <div class="deals-list">
+                <div
+                  v-if="(deals.dealsIn?.length || 0) === 0"
+                  class="empty-state"
+                >
+                  No incoming deals found
+                </div>
+                <div
+                  v-else
+                  v-for="deal in deals.dealsIn"
+                  :key="'in-' + deal.ID"
+                  class="deal-item"
+                  @click="showDealDetails(deal)"
+                >
+                  <!-- DEAL --->
+                  <div class="deal-header">
+                    <div class="deal-price">
+                      ${{ deal.volumeUSD}} at
+                      {{formatDate(deal.blockchainTransfer.timestamp)}}
+                    </div>
+                  </div>
+                  <div class="deal-details">
+                    <div class="deal-volume">
+                      {{ deal.volumeTokens }} tokens
+                    </div>
+                  </div>
+                  <!--- DEAL -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Outgoing Deals Column -->
+            <div class="deals-column outgoing">
+              <div class="deals-column-header">
+                <div class="deals-column-title">📤 Outgoing Deals</div>
+                <div class="deals-count">{{ deals.dealsOut?.length || 0 }}</div>
+              </div>
+              <div class="deals-list">
+                <div
+                  v-if="(deals.dealsOut?.length || 0) === 0"
+                  class="empty-state"
+                >
+                  No outgoing deals found
+                </div>
+                <div
+                  v-else
+                  v-for="deal in deals.dealsOut"
+                  :key="'out-' + deal.ID"
+                  class="deal-item"
+                  @click="showDealDetails(deal)"
+                >
+                  <!-- DEAL --->
+                  <div class="deal-header">
+                    <div class="deal-price">
+                      ${{ deal.volumeUSD}} at
+                      {{formatDate(deal.blockchainTransfer.timestamp)}}
+                    </div>
+                  </div>
+                  <div class="deal-details">
+                    <div class="deal-volume">
+                      {{ deal.volumeTokens }} tokens
+                    </div>
+                  </div>
+                  <!--- DEAL -->
+                </div>
               </div>
             </div>
           </div>
@@ -531,7 +642,6 @@
             balance: null,
             deals: null,
             selectedDeal: null,
-            activeTab: "in",
             loading: false,
             error: null,
             apiBaseUrl: "http://localhost:8080",
@@ -539,12 +649,7 @@
         },
 
         computed: {
-          currentDeals() {
-            if (!this.deals) return [];
-            return this.activeTab === "in"
-              ? this.deals.dealsIn
-              : this.deals.dealsOut;
-          },
+          // Remove the currentDeals computed property since we're not using tabs anymore
         },
 
         async mounted() {
@@ -603,7 +708,6 @@
             this.selectedWallet = wallet;
             this.balance = null;
             this.deals = null;
-            this.activeTab = "in";
 
             await Promise.all([this.loadBalance(), this.loadDeals()]);
           },
@@ -659,7 +763,43 @@
           },
 
           formatDate(dateString) {
-            return new Date(dateString).toLocaleString();
+            const date = new Date(dateString);
+            const currentYear = new Date().getFullYear();
+            const dateYear = date.getFullYear();
+
+            // Format time as HH:MM:SS
+            const hours = date.getHours().toString().padStart(2, "0");
+            const minutes = date.getMinutes().toString().padStart(2, "0");
+            const seconds = date.getSeconds().toString().padStart(2, "0");
+            const timeString = `${hours}:${minutes}:${seconds}`;
+
+            if (dateYear === currentYear) {
+              // Same year: "September 16, 23:01:59"
+              const monthNames = [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+              ];
+              const monthName = monthNames[date.getMonth()];
+              const day = date.getDate();
+              return `${monthName} ${day}, ${timeString}`;
+            } else {
+              // Different year: "16.09.2025 23:01:59"
+              const day = date.getDate().toString().padStart(2, "0");
+              const month = (date.getMonth() + 1).toString().padStart(2, "0");
+              const year = dateYear;
+
+              return `${day}.${month}.${year} ${timeString}`;
+            }
           },
         },
       }).mount("#app");
