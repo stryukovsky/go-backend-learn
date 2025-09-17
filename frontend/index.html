@@ -734,7 +734,7 @@
               this.error = null;
 
               const response = await axios.get(
-                `${this.apiBaseUrl}/api/deals/${this.selectedWallet.address}`,
+                `${this.apiBaseUrl}/api/deals/${this.selectedChain.ChainId}/${this.selectedWallet.address}`,
               );
               this.deals = response.data;
             } catch (error) {

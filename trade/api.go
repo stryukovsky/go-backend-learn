@@ -113,10 +113,11 @@ func ListChains(ctx *gin.Context, db *gorm.DB) {
 	ctx.JSON(http.StatusOK, chains)
 }
 
-func ListDealsByWallet(ctx *gin.Context, db *gorm.DB) {
+func ListDealsByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
+	chainId := ctx.Param("chainId")
 	dealsAsSender := []Deal{}
-	err := db.Preload("BlockchainTransfer").Find(&dealsAsSender, Deal{BlockchainTransfer: ERC20Transfer{Sender: wallet}}).Error
+	err := db.Preload("BlockchainTransfer").Find(&dealsAsSender, Deal{BlockchainTransfer: ERC20Transfer{Sender: wallet, ChainId: chainId}}).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -148,7 +149,7 @@ func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	router.GET("/api/balance/wallet/:wallet", func(ctx *gin.Context) {
 		BalanceByWallet(ctx, db, rdb)
 	})
-	router.GET("/api/deals/:wallet", func(ctx *gin.Context) {
-		ListDealsByWallet(ctx, db)
+	router.GET("/api/deals/:chainId/:wallet", func(ctx *gin.Context) {
+		ListDealsByWalletAndChain(ctx, db)
 	})
 }
