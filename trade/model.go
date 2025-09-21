@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"gorm.io/gorm"
 )
 
@@ -95,6 +96,26 @@ func (b DBInt) Value() (driver.Value, error) {
 // GormDataType declares the database type
 func (DBInt) GormDataType() string {
 	return "numeric" // PostgreSQL numeric type
+}
+
+type AaveInteraction struct {
+	gorm.Model
+	VolumeTokens         DBNumeric `json:"volumeTokens" binding:"required"`
+	VolumeUSD            DBNumeric `json:"volumeUSD" binding:"required"`
+	AaveEventID int
+	BlockchainEvent AaveEvent `json:"blockchainEvent" binding:"required"`
+}
+
+type AaveEvent struct {
+	gorm.Model
+	Direction string `json:"direction" binding:"required"`
+	WalletAddress string `json:"walletAddress" binding:"required"`
+	Amount DBInt `json:"amount" binding:"required"`
+}
+
+func NewAaveEvent(direction string, walletAddress common.Address, amount *big.Int) AaveEvent{
+	return AaveEvent{Direction: direction, WalletAddress: walletAddress.Hex(), Amount: DBInt{amount}}
+
 }
 
 type Deal struct {
