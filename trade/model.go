@@ -100,20 +100,20 @@ func (DBInt) GormDataType() string {
 
 type AaveInteraction struct {
 	gorm.Model
-	VolumeTokens         DBNumeric `json:"volumeTokens" binding:"required"`
-	VolumeUSD            DBNumeric `json:"volumeUSD" binding:"required"`
-	AaveEventID int
-	BlockchainEvent AaveEvent `json:"blockchainEvent" binding:"required"`
+	VolumeTokens      DBNumeric `json:"volumeTokens" binding:"required"`
+	VolumeUSD         DBNumeric `json:"volumeUSD" binding:"required"`
+	BlockchainEventID int
+	BlockchainEvent   AaveEvent `json:"blockchainEvent" binding:"required"`
 }
 
 type AaveEvent struct {
 	gorm.Model
-	Direction string `json:"direction" binding:"required"`
+	Direction     string `json:"direction" binding:"required"`
 	WalletAddress string `json:"walletAddress" binding:"required"`
-	Amount DBInt `json:"amount" binding:"required"`
+	Amount        DBInt  `json:"amount" binding:"required"`
 }
 
-func NewAaveEvent(direction string, walletAddress common.Address, amount *big.Int) AaveEvent{
+func NewAaveEvent(direction string, walletAddress common.Address, amount *big.Int) AaveEvent {
 	return AaveEvent{Direction: direction, WalletAddress: walletAddress.Hex(), Amount: DBInt{amount}}
 
 }

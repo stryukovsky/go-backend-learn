@@ -28,7 +28,6 @@ func main() {
 		panic("Cannot start db connection" + err.Error())
 	}
 	redis := trade.NewRedisClient()
-	db.AutoMigrate(&trade.Deal{}, &trade.ERC20Transfer{}, &trade.Worker{}, &trade.Token{}, &trade.TrackedWallet{}, &trade.Chain{})
 	cmd := &cli.Command{
 		Commands: []*cli.Command{
 			{
@@ -45,6 +44,22 @@ func main() {
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					Fixture(db)
 					return nil
+				},
+			},
+			{
+				Name:  "migrate",
+				Usage: "migrate database",
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return db.AutoMigrate(
+						&trade.Deal{},
+						&trade.ERC20Transfer{},
+						&trade.Worker{},
+						&trade.Token{},
+						&trade.TrackedWallet{},
+						&trade.Chain{},
+						&trade.AaveEvent{},
+						&trade.AaveInteraction{},
+					)
 				},
 			},
 			{
