@@ -16,14 +16,14 @@ import (
 	"gorm.io/gorm"
 )
 
-func FetchTransfersFromEthJSONRPC(
+func  fetchTransfersFromEthJSONRPC[A any, B any](
 	chainId string,
 	db *gorm.DB,
 	cache *redis.Client,
 	config *trade.Worker,
 	startFromBlock uint64,
 	currentBlockchainBlock uint64,
-	handlers []protocols.DeFiProtocolHandler[any, any],
+	handlers []protocols.DeFiProtocolHandler[A, B],
 	trackedWallets []trade.TrackedWallet,
 	participants []string) {
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
@@ -93,14 +93,16 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		return
 	}
 
-	tokens := make([]hodl.HODLHandler, 0, len(tokensFromDB))
+	var defiProtocolHandlers []protocols.DeFiProtocolHandler[any, any]
 	for _, token := range tokensFromDB {
 		erc20, err := hodl.NewHODLHandler(client, token, rdb)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot create token %s: %e", token.Address, err))
 			continue
 		}
-		tokens = append(tokens, *erc20)
+		var casted protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
+		casted = erc20
+		defiProtocolHandlers = append(defiProtocolHandlers, casted)
 	}
 
 	var participants []string
@@ -111,14 +113,14 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
 	}
 	if len(participants) > 0 {
-		FetchTransfersFromEthJSONRPC(
+		fetchTransfersFromEthJSONRPC(
 			chainId.String(),
 			db,
 			rdb,
 			&config,
 			minBlockOfWalletsToFetchFromNode,
 			currentBlockchainBlock,
-			tokens,
+			defiProtocolHandlers,
 			trackedWallets,
 			participants)
 	}
