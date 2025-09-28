@@ -1,4 +1,4 @@
-package trade
+package worker
 
 import (
 	"context"
@@ -10,47 +10,51 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
+	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/stryukovsky/go-backend-learn/trade/protocols"
+	"github.com/stryukovsky/go-backend-learn/trade/protocols/hodl"
 	"gorm.io/gorm"
 )
 
-func FetchTransfersFromNode(
+func FetchTransfersFromEthJSONRPC(
 	chainId string,
 	db *gorm.DB,
 	cache *redis.Client,
-	config *Worker,
+	config *trade.Worker,
 	startFromBlock uint64,
 	currentBlockchainBlock uint64,
-	tokens []ERC20,
-	trackedWallets []TrackedWallet,
+	handlers []protocols.DeFiProtocolHandler[any, any],
+	trackedWallets []trade.TrackedWallet,
 	participants []string) {
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
-	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(tokens), startFromBlock, endInBlock))
-	for _, token := range tokens {
-		transfers, err := token.ListTransfersOfParticipants(
+	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(handlers), startFromBlock, endInBlock))
+	for _, handler := range handlers {
+		interactions, err := handler.FetchBlockchainInteractions(
 			chainId,
 			participants,
 			startFromBlock,
 			endInBlock,
-			cache)
+		)
 		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot fetch transfers: %s", token.Info.Symbol, err.Error()))
+			slog.Warn(fmt.Sprintf("[%s] Cannot fetch blockchain interactions: %s", handler.Name(), err.Error()))
 			continue
 		}
-		slog.Info(fmt.Sprintf("[%s] Found %d transfers where tracked wallets participated", token.Info.Symbol, len(transfers)))
-		for _, transfer := range transfers {
-			deal, err := CreateDeal(cache, transfer, token)
-			if err != nil {
-				slog.Warn(fmt.Sprintf("[%s] Cannot create deal object for ERC20 transfer %s: %s", token.Info.Symbol, transfer.TxId, err.Error()))
-			} else {
-				slog.Info(fmt.Sprintf("[%s] Found deal with volume $ %s", token.Info.Symbol, deal.VolumeUSD.FloatString(5)))
-				db.Save(deal)
-			}
+		slog.Info(fmt.Sprintf("[%s] Found %d blockchain interactions where tracked wallets participated", handler.Name(), len(interactions)))
+		financialInteractions, err := handler.PopulateWithFinanceInfo(interactions)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
+			continue
+		}
+		err = db.Create(financialInteractions).Error
+		if err != nil {
+			slog.Warn(fmt.Sprintf("[%s] Cannot save financial interactions: %s", handler.Name(), err.Error()))
+			continue
 		}
 	}
 }
 
 func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
-	var config Worker
+	var config trade.Worker
 	result := db.First(&config, id)
 	if result.Error != nil {
 		slog.Warn("No config with id " + strconv.Itoa(int(id)))
@@ -69,8 +73,8 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		return
 	}
 
-	var trackedWallets []TrackedWallet
-	err = db.Find(&trackedWallets, &TrackedWallet{ChainId: chainId.String()}).Error
+	var trackedWallets []trade.TrackedWallet
+	err = db.Find(&trackedWallets, &trade.TrackedWallet{ChainId: chainId.String()}).Error
 	if err != nil {
 		slog.Warn("Failed to get tracked wallets")
 		return
@@ -82,16 +86,16 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		return
 	}
 
-	var tokensFromDB []Token
-	err = db.Find(&tokensFromDB, &Token{ChainId: chainId.String()}).Error
+	var tokensFromDB []trade.Token
+	err = db.Find(&tokensFromDB, &trade.Token{ChainId: chainId.String()}).Error
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot get tokens of config: %s", err.Error()))
 		return
 	}
 
-	tokens := make([]ERC20, 0, len(tokensFromDB))
+	tokens := make([]hodl.ERC20, 0, len(tokensFromDB))
 	for _, token := range tokensFromDB {
-		erc20, err := NewERC20(client, token)
+		erc20, err := hodl.NewERC20(client, token)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot create token %s: %e", token.Address, err))
 			continue
@@ -107,7 +111,7 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
 	}
 	if len(participants) > 0 {
-		FetchTransfersFromNode(
+		FetchTransfersFromEthJSONRPC(
 			chainId.String(),
 			db,
 			cache,

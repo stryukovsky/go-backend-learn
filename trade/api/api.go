@@ -1,7 +1,6 @@
-package trade
+package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,6 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"gorm.io/gorm"
 )
 
@@ -16,53 +17,9 @@ func apiErr(ctx *gin.Context, err error) {
 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 }
 
-type BalanceAcrossAllChains struct {
-	Address string `json:"address" binding:"required"`
-	Balance string `json:"balance" binding:"required"`
-}
-
-func NewBalanceAcrossAllChains(address string, balance string) *BalanceAcrossAllChains {
-	return &BalanceAcrossAllChains{
-		Address: address,
-		Balance: balance,
-	}
-}
-
-type BalanceOnChain struct {
-	ChainId string `json:"chainId" binding:"required"`
-	Address string `json:"address" binding:"required"`
-	Balance string `json:"balance" binding:"required"`
-}
-
-func (b *BalanceOnChain) MarshalBinary() ([]byte, error) {
-	return json.Marshal(b)
-}
-
-func NewBalanceOnChain(chainId string, address string, balance string) *BalanceOnChain {
-	return &BalanceOnChain{
-		Address: address,
-		Balance: balance,
-		ChainId: chainId,
-	}
-}
-
-type DealsByWallet struct {
-	Address  string `json:"address" binding:"required"`
-	DealsIn  []Deal `json:"dealsIn" binding:"required"`
-	DealsOut []Deal `json:"dealsOut" binding:"required"`
-}
-
-func NewDealsByWallet(wallet string, dealsIn []Deal, dealsOut []Deal) *DealsByWallet {
-	return &DealsByWallet{
-		Address:  wallet,
-		DealsIn:  dealsIn,
-		DealsOut: dealsOut,
-	}
-}
-
 func BalanceByWallet(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
-	balance, err := GetCachedBalanceOfWallet(db, rdb, walletAddress)
+	balance, err := cache.GetCachedBalanceOfWallet(db, rdb, walletAddress)
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -74,7 +31,7 @@ func BalanceByWallet(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
-	result, err := GetCachedBalanceOfWalletOnChain(db, rdb, chainId, walletAddress)
+	result, err := cache.GetCachedBalanceOfWalletOnChain(db, rdb, chainId, walletAddress)
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -84,8 +41,8 @@ func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 
 func GetWalletsOnChain(ctx *gin.Context, db *gorm.DB) {
 	chainId := ctx.Param("chainId")
-	wallets := []TrackedWallet{}
-	err := db.Find(&wallets, TrackedWallet{ChainId: chainId}).Error
+	wallets := []trade.TrackedWallet{}
+	err := db.Find(&wallets, trade.TrackedWallet{ChainId: chainId}).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -94,7 +51,7 @@ func GetWalletsOnChain(ctx *gin.Context, db *gorm.DB) {
 }
 
 func ListWallets(ctx *gin.Context, db *gorm.DB) {
-	wallets := []TrackedWallet{}
+	wallets := []trade.TrackedWallet{}
 	err := db.Find(&wallets).Error
 	if err != nil {
 		apiErr(ctx, err)
@@ -104,7 +61,7 @@ func ListWallets(ctx *gin.Context, db *gorm.DB) {
 }
 
 func ListChains(ctx *gin.Context, db *gorm.DB) {
-	chains := []Chain{}
+	chains := []trade.Chain{}
 	err := db.Find(&chains).Error
 	if err != nil {
 		apiErr(ctx, err)
@@ -116,20 +73,20 @@ func ListChains(ctx *gin.Context, db *gorm.DB) {
 func ListDealsByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
-	dealsAsSender := []Deal{}
-	err := db.Preload("BlockchainTransfer").Find(&dealsAsSender, Deal{BlockchainTransfer: ERC20Transfer{Sender: wallet, ChainId: chainId}}).Error
+	dealsAsSender := []trade.Deal{}
+	err := db.Preload("BlockchainTransfer").Find(&dealsAsSender, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Sender: wallet, ChainId: chainId}}).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
 	}
 
-	dealsAsRecipient := []Deal{}
-	err = db.Preload("BlockchainTransfer").Find(&dealsAsRecipient, Deal{BlockchainTransfer: ERC20Transfer{Recipient: wallet}}).Error
+	dealsAsRecipient := []trade.Deal{}
+	err = db.Preload("BlockchainTransfer").Find(&dealsAsRecipient, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Recipient: wallet}}).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
 	}
-	result := NewDealsByWallet(wallet, dealsAsRecipient, dealsAsSender)
+	result := trade.NewDealsByWallet(wallet, dealsAsRecipient, dealsAsSender)
 	ctx.JSON(http.StatusOK, result)
 }
 

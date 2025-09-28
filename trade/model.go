@@ -2,6 +2,7 @@ package trade
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -178,3 +179,49 @@ type TrackedWallet struct {
 	ChainId   string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
 	LastBlock uint64 `json:"lastBlock" binding:"required"`
 }
+
+type BalanceAcrossAllChains struct {
+	Address string `json:"address" binding:"required"`
+	Balance string `json:"balance" binding:"required"`
+}
+
+func NewBalanceAcrossAllChains(address string, balance string) *BalanceAcrossAllChains {
+	return &BalanceAcrossAllChains{
+		Address: address,
+		Balance: balance,
+	}
+}
+
+type BalanceOnChain struct {
+	ChainId string `json:"chainId" binding:"required"`
+	Address string `json:"address" binding:"required"`
+	Balance string `json:"balance" binding:"required"`
+}
+
+func (b *BalanceOnChain) MarshalBinary() ([]byte, error) {
+	return json.Marshal(b)
+}
+
+func NewBalanceOnChain(chainId string, address string, balance string) *BalanceOnChain {
+	return &BalanceOnChain{
+		Address: address,
+		Balance: balance,
+		ChainId: chainId,
+	}
+}
+
+type DealsByWallet struct {
+	Address  string       `json:"address" binding:"required"`
+	DealsIn  []Deal `json:"dealsIn" binding:"required"`
+	DealsOut []Deal `json:"dealsOut" binding:"required"`
+}
+
+func NewDealsByWallet(wallet string, dealsIn []Deal, dealsOut []Deal) *DealsByWallet {
+	return &DealsByWallet{
+		Address:  wallet,
+		DealsIn:  dealsIn,
+		DealsOut: dealsOut,
+	}
+}
+
+

@@ -1,55 +1,41 @@
-package trade
+package hodl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
 	"sync"
 
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
+	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/stryukovsky/go-backend-learn/trade/cache"
 )
 
-type ERC20 struct {
-	client *ethclient.Client
-	caller *IERC20Caller
-	Info   Token
+type HODLHandler struct {
+	token ERC20
+	rdb   *redis.Client
 }
 
-func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
-	balance, err := token.caller.BalanceOf(&bind.CallOpts{}, common.HexToAddress(recipient))
-	if err != nil {
-		return nil, err
-	}
-	return balance, nil
-}
-
-var TransferTopic string = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-
-const ParallelFactor = 16
-
-func (token *ERC20) ListTransfersOfParticipants(
+func (h *HODLHandler) FetchBlockchainInteractions(
 	chainId string,
 	participants []string,
 	fromBlock uint64,
 	toBlock uint64,
-	cache *redis.Client,
-) ([]ERC20Transfer, error) {
+
+) ([]trade.ERC20Transfer, error) {
 	formattedParticipants := make([]common.Hash, len(participants))
 	for i, participant := range participants {
 		formattedParticipants[i] = common.HexToHash(participant)
 	}
 	logsParticipantsSenders, err :=
-		token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
+		h.token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 			FromBlock: big.NewInt(int64(fromBlock)),
 			ToBlock:   big.NewInt(int64(toBlock)),
-			Addresses: []common.Address{common.HexToAddress(token.Info.Address)},
+			Addresses: []common.Address{common.HexToAddress(h.token.Info.Address)},
 			Topics: [][]common.Hash{
 				{common.HexToHash(TransferTopic)},
 				formattedParticipants,
@@ -57,13 +43,13 @@ func (token *ERC20) ListTransfersOfParticipants(
 			},
 		})
 	if err != nil {
-		return []ERC20Transfer{}, err
+		return []trade.ERC20Transfer{}, err
 	}
 	logsParticipantsRecipients, err :=
-		token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
+		h.token.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 			FromBlock: big.NewInt(int64(fromBlock)),
 			ToBlock:   big.NewInt(int64(toBlock)),
-			Addresses: []common.Address{common.HexToAddress(token.Info.Address)},
+			Addresses: []common.Address{common.HexToAddress(h.token.Info.Address)},
 			Topics: [][]common.Hash{
 				{common.HexToHash(TransferTopic)},
 				{},
@@ -71,13 +57,13 @@ func (token *ERC20) ListTransfersOfParticipants(
 			},
 		})
 	if err != nil {
-		return []ERC20Transfer{}, err
+		return []trade.ERC20Transfer{}, err
 	}
 	allLogs := append(logsParticipantsSenders, logsParticipantsRecipients...)
 	slog.Info(fmt.Sprintf("Scanned %d transfers", len(allLogs)))
 	logsChunks := lo.Chunk(allLogs, ParallelFactor)
-	resultCh := make(chan ERC20Transfer)
-	result := make([]ERC20Transfer, len(allLogs))
+	resultCh := make(chan trade.ERC20Transfer)
+	result := make([]trade.ERC20Transfer, len(allLogs))
 
 	var wg sync.WaitGroup
 	wg.Add(ParallelFactor)
@@ -92,12 +78,12 @@ func (token *ERC20) ListTransfersOfParticipants(
 					amount := common.BytesToHash(event.Data).Big()
 					txId := event.TxHash.Hex()
 					block := big.NewInt(int64(event.BlockNumber))
-					timestamp, err := GetCachedBlockTimestamp(token.client, cache, event.BlockNumber)
+					timestamp, err := cache.GetCachedBlockTimestamp(h.token.client, h.rdb, event.BlockNumber)
 					if err != nil {
 						slog.Warn(fmt.Sprintf("Cannot fetch from cache or blockchain info on block %d timestamp: %s", event.BlockNumber, err.Error()))
 						continue
 					}
-					transfer := NewERC20Transfer(token.Info.Address, sender, recipient, amount, block, chainId, timestamp, txId)
+					transfer := trade.NewERC20Transfer(h.token.Info.Address, sender, recipient, amount, block, chainId, timestamp, txId)
 					resultCh <- transfer
 				}
 			}()
@@ -112,18 +98,35 @@ func (token *ERC20) ListTransfersOfParticipants(
 	}
 
 	return result, nil
+
 }
 
-var (
-	BadDecimalsValue error = errors.New("Bad decimals of ERC20 contract")
-	BadNameValue     error = errors.New("Bad name of ERC20 contract")
-	BadSymbolValue   error = errors.New("Bad symbol of ERC20 contract")
-)
+func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer) ([]trade.Deal, error) {
 
-func NewERC20(client *ethclient.Client, token Token) (*ERC20, error) {
-	caller, err := NewIERC20Caller(common.HexToAddress(token.Address), client)
-	if err != nil {
-		return nil, err
+	result := make([]trade.Deal, len(interactions))
+
+	for _, transfer := range interactions {
+
+		closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, h.token.Info.Symbol, &transfer.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		volumeToken := big.NewRat(1, 1)
+		volumeToken = volumeToken.SetFrac(transfer.Amount.Int, new(big.Int).Exp(big.NewInt(10), h.token.Info.Decimals.Int, nil))
+
+		volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
+		deal := trade.Deal{
+			Price:              trade.DBNumeric{closePrice},
+			VolumeUSD:          trade.DBNumeric{volumeUSD},
+			VolumeTokens:       trade.DBNumeric{volumeToken},
+			BlockchainTransfer: transfer,
+		}
+		result = append(result, deal)
 	}
-	return &ERC20{client: client, caller: caller, Info: token}, nil
+	return result, nil
+}
+
+func (h *HODLHandler) Name() string {
+	return h.token.Info.Symbol
 }

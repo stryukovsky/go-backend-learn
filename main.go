@@ -8,6 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/stryukovsky/go-backend-learn/trade/cache"
+	"github.com/stryukovsky/go-backend-learn/trade/worker"
+	"github.com/stryukovsky/go-backend-learn/trade/api"
 	"github.com/urfave/cli/v3"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -18,7 +21,7 @@ func Api(db *gorm.DB, cache *redis.Client) {
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"*"}
 	router.Use(cors.New(config))
-	trade.CreateApi(router, db, cache)
+	api.CreateApi(router, db, cache)
 	router.Run()
 }
 
@@ -27,7 +30,7 @@ func main() {
 	if err != nil {
 		panic("Cannot start db connection" + err.Error())
 	}
-	redis := trade.NewRedisClient()
+	redis := cache.NewRedisClient()
 	cmd := &cli.Command{
 		Commands: []*cli.Command{
 			{
@@ -66,7 +69,7 @@ func main() {
 				Name:  "index",
 				Usage: "Index events",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					trade.Cycle(db, redis, 1)
+					worker.Cycle(db, redis, 1)
 					return nil
 				},
 			},
