@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/stryukovsky/go-backend-learn/trade/binance"
 	"gorm.io/gorm"
 )
 
@@ -150,7 +151,7 @@ func GetCachedBalanceOfWalletOnChain(db *gorm.DB, rdb *redis.Client, chainId str
 	}
 
 	if cached != "" {
-		var result BalanceOnChain
+		var result trade.BalanceOnChain
 		err = json.Unmarshal([]byte(cached), &result)
 		if err != nil {
 			return nil, err
@@ -158,18 +159,18 @@ func GetCachedBalanceOfWalletOnChain(db *gorm.DB, rdb *redis.Client, chainId str
 		return &result, nil
 	}
 
-	dealsIncome := []Deal{}
-	dealsOutcome := []Deal{}
+	dealsIncome := []trade.Deal{}
+	dealsOutcome := []trade.Deal{}
 	err = db.
 		Preload("BlockchainTransfer").
-		Find(&dealsIncome, Deal{BlockchainTransfer: ERC20Transfer{Recipient: walletAddress, ChainId: chainId}}).
+		Find(&dealsIncome, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Recipient: walletAddress, ChainId: chainId}}).
 		Error
 	if err != nil {
 		return nil, err
 	}
 	err = db.
 		Preload("BlockchainTransfer").
-		Find(&dealsOutcome, Deal{BlockchainTransfer: ERC20Transfer{Sender: walletAddress, ChainId: chainId}}).
+		Find(&dealsOutcome, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Sender: walletAddress, ChainId: chainId}}).
 		Error
 	if err != nil {
 		return nil, err

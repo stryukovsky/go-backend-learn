@@ -53,7 +53,7 @@ func FetchTransfersFromEthJSONRPC(
 	}
 }
 
-func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
+func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 	var config trade.Worker
 	result := db.First(&config, id)
 	if result.Error != nil {
@@ -93,9 +93,9 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		return
 	}
 
-	tokens := make([]hodl.ERC20, 0, len(tokensFromDB))
+	tokens := make([]hodl.HODLHandler, 0, len(tokensFromDB))
 	for _, token := range tokensFromDB {
-		erc20, err := hodl.NewERC20(client, token)
+		erc20, err := hodl.NewHODLHandler(client, token, rdb)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot create token %s: %e", token.Address, err))
 			continue
@@ -114,7 +114,7 @@ func Cycle(db *gorm.DB, cache *redis.Client, id uint) {
 		FetchTransfersFromEthJSONRPC(
 			chainId.String(),
 			db,
-			cache,
+			rdb,
 			&config,
 			minBlockOfWalletsToFetchFromNode,
 			currentBlockchainBlock,

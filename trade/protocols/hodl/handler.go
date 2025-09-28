@@ -9,6 +9,7 @@ import (
 
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
@@ -129,4 +130,16 @@ func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer
 
 func (h *HODLHandler) Name() string {
 	return h.token.Info.Symbol
+}
+
+func NewHODLHandler(client *ethclient.Client, token trade.Token, rdb *redis.Client) (*HODLHandler, error) {
+	erc20, err := NewERC20(client, token)
+	if err != nil {
+		return nil, err
+	}
+	return &HODLHandler{
+		token: *erc20,
+		rdb:   rdb,
+	}, nil
+
 }
