@@ -16,15 +16,13 @@ import (
 	"gorm.io/gorm"
 )
 
-func  fetchTransfersFromEthJSONRPC[A any, B any](
+func fetchInteractionsFromEthJSONRPC[A any, B any](
 	chainId string,
 	db *gorm.DB,
-	cache *redis.Client,
 	config *trade.Worker,
 	startFromBlock uint64,
 	currentBlockchainBlock uint64,
 	handlers []protocols.DeFiProtocolHandler[A, B],
-	trackedWallets []trade.TrackedWallet,
 	participants []string) {
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(handlers), startFromBlock, endInBlock))
@@ -92,8 +90,15 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		slog.Warn(fmt.Sprintf("Cannot get tokens of config: %s", err.Error()))
 		return
 	}
+	var participants []string
+	var minBlockOfWalletsToFetchFromNode uint64 = math.MaxUint64
+	for _, wallet := range trackedWallets {
+		slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
+		participants = append(participants, wallet.Address)
+		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
+	}
 
-	var defiProtocolHandlers []protocols.DeFiProtocolHandler[any, any]
+	var defiProtocolHandlers []protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
 	for _, token := range tokensFromDB {
 		erc20, err := hodl.NewHODLHandler(client, token, rdb)
 		if err != nil {
@@ -105,23 +110,14 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		defiProtocolHandlers = append(defiProtocolHandlers, casted)
 	}
 
-	var participants []string
-	var minBlockOfWalletsToFetchFromNode uint64 = math.MaxUint64
-	for _, wallet := range trackedWallets {
-		slog.Info(fmt.Sprintf("Wallet %s will be updated with transfers fetched from blockchain", wallet.Address))
-		participants = append(participants, wallet.Address)
-		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
-	}
 	if len(participants) > 0 {
-		fetchTransfersFromEthJSONRPC(
+		fetchInteractionsFromEthJSONRPC(
 			chainId.String(),
 			db,
-			rdb,
 			&config,
 			minBlockOfWalletsToFetchFromNode,
 			currentBlockchainBlock,
 			defiProtocolHandlers,
-			trackedWallets,
 			participants)
 	}
 }
