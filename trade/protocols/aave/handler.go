@@ -8,3 +8,5 @@ type AaveHandler struct {
 	rdb *redis.Client
 
 }
+
+func NewAaveHandler(address string)
