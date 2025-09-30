@@ -116,7 +116,6 @@ type AaveEvent struct {
 
 func NewAaveEvent(direction string, walletAddress common.Address, amount *big.Int) AaveEvent {
 	return AaveEvent{Direction: direction, WalletAddress: walletAddress.Hex(), Amount: DBInt{amount}}
-
 }
 
 type Deal struct {
@@ -173,6 +172,18 @@ type Token struct {
 	Decimals DBInt  `json:"decimals" binding:"required"`
 }
 
+const (
+ Aave = "Aave"
+)
+
+type DeFiPlatform struct {
+	gorm.Model
+	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
+	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
+	Name    string `json:"name" binding:"required"`
+	Type string `json:"type" binding:"required"`
+}
+
 type TrackedWallet struct {
 	gorm.Model
 	Address   string `json:"address" binding:"required" gorm:"uniqueIndex:idx_wallet_uniqueness"`
@@ -211,7 +222,7 @@ func NewBalanceOnChain(chainId string, address string, balance string) *BalanceO
 }
 
 type DealsByWallet struct {
-	Address  string       `json:"address" binding:"required"`
+	Address  string `json:"address" binding:"required"`
 	DealsIn  []Deal `json:"dealsIn" binding:"required"`
 	DealsOut []Deal `json:"dealsOut" binding:"required"`
 }
@@ -223,5 +234,3 @@ func NewDealsByWallet(wallet string, dealsIn []Deal, dealsOut []Deal) *DealsByWa
 		DealsOut: dealsOut,
 	}
 }
-
-

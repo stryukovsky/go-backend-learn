@@ -12,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
+	"github.com/stryukovsky/go-backend-learn/trade/protocols/aave"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/hodl"
 	"gorm.io/gorm"
 )
@@ -98,7 +99,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
 	}
 
-	var defiProtocolHandlers []protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
+	var erc20Handlers []protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
 	for _, token := range tokensFromDB {
 		erc20, err := hodl.NewHODLHandler(client, token, rdb)
 		if err != nil {
@@ -107,7 +108,19 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		}
 		var casted protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
 		casted = erc20
-		defiProtocolHandlers = append(defiProtocolHandlers, casted)
+		erc20Handlers = append(erc20Handlers, casted)
+	}
+
+	var aaveInstances []trade.DeFiPlatform
+	err = db.Find(&aaveInstances, &trade.DeFiPlatform{ChainId: chainId.String(), Type: trade.Aave}).Error
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Cannot get aave platform instances: %s", err.Error()))
+		return
+	}
+	var aaveHandlers []protocols.DeFiProtocolHandler[trade.AaveEvent, trade.AaveInteraction]
+	for _, aaveInstance := range aaveInstances {
+		aaveHandler, err := aave.NewAaveHandler()
+
 	}
 
 	if len(participants) > 0 {
@@ -117,7 +130,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 			&config,
 			minBlockOfWalletsToFetchFromNode,
 			currentBlockchainBlock,
-			defiProtocolHandlers,
+			erc20Handlers,
 			participants)
 	}
 }
