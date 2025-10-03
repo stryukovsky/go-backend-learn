@@ -62,6 +62,7 @@ func main() {
 						&trade.Chain{},
 						&trade.AaveEvent{},
 						&trade.AaveInteraction{},
+						&trade.DeFiPlatform{},
 					)
 				},
 			},

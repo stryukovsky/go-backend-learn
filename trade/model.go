@@ -188,7 +188,6 @@ type DeFiPlatform struct {
 	gorm.Model
 	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
 	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
-	Name    string `json:"name" binding:"required"`
 	Type    string `json:"type" binding:"required"`
 }
 
