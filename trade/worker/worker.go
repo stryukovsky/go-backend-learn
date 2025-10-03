@@ -17,6 +17,10 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	ParallelFactor = 16
+)
+
 func fetchInteractionsFromEthJSONRPC[A any, B any](
 	chainId string,
 	db *gorm.DB,
@@ -101,7 +105,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 
 	var erc20Handlers []protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
 	for _, token := range tokensFromDB {
-		erc20, err := hodl.NewHODLHandler(client, token, rdb)
+		erc20, err := hodl.NewHODLHandler(client, token, rdb, ParallelFactor)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot create token %s: %e", token.Address, err))
 			continue
@@ -119,8 +123,16 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 	}
 	var aaveHandlers []protocols.DeFiProtocolHandler[trade.AaveEvent, trade.AaveInteraction]
 	for _, aaveInstance := range aaveInstances {
-		aaveHandler, err := aave.NewAaveHandler()
-
+		var tokens []trade.Token
+		db.Find(&tokens, trade.Token{ChainId: aaveInstance.ChainId})
+		aaveHandler, err := aave.NewAaveHandler(aaveInstance, client, rdb, tokens, ParallelFactor)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Cannot get aave platform handler: %s", err.Error()))
+			continue
+		}
+		var casted protocols.DeFiProtocolHandler[trade.AaveEvent, trade.AaveInteraction]
+		casted = aaveHandler
+		aaveHandlers = append(aaveHandlers, casted)
 	}
 
 	if len(participants) > 0 {

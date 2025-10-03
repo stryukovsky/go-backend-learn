@@ -15,6 +15,10 @@ type DBNumeric struct {
 	*big.Rat
 }
 
+func NewDBNumeric(value *big.Rat) DBNumeric {
+	return DBNumeric{value}
+}
+
 func (br *DBNumeric) Scan(value any) error {
 	if value == nil {
 		br.Rat = nil
@@ -101,6 +105,7 @@ func (DBInt) GormDataType() string {
 
 type AaveInteraction struct {
 	gorm.Model
+	Price             DBNumeric `json:"price" binding:"required"`
 	VolumeTokens      DBNumeric `json:"volumeTokens" binding:"required"`
 	VolumeUSD         DBNumeric `json:"volumeUSD" binding:"required"`
 	BlockchainEventID int
@@ -109,18 +114,21 @@ type AaveInteraction struct {
 
 type AaveEvent struct {
 	gorm.Model
-	Direction     string `json:"direction" binding:"required"`
-	WalletAddress string `json:"walletAddress" binding:"required"`
-	Amount        DBInt  `json:"amount" binding:"required"`
+	ChainId       string    `json:"chainId" binding:"required"`
+	Direction     string    `json:"direction" binding:"required"`
+	WalletAddress string    `json:"walletAddress" binding:"required"`
+	TokenAddress  string    `json:"tokenAddress" binding:"required"`
+	Amount        DBInt     `json:"amount" binding:"required"`
+	Timestamp     time.Time `json:"timestamp" binding:"required"`
 }
 
-func NewAaveEvent(direction string, walletAddress common.Address, amount *big.Int) AaveEvent {
-	return AaveEvent{Direction: direction, WalletAddress: walletAddress.Hex(), Amount: DBInt{amount}}
+func NewAaveEvent(chainId string, direction string, walletAddress common.Address, amount *big.Int, timestamp time.Time) AaveEvent {
+	return AaveEvent{ChainId: chainId, Direction: direction, WalletAddress: walletAddress.Hex(), Amount: DBInt{amount}, Timestamp: timestamp}
 }
 
 type Deal struct {
 	gorm.Model
-	Price                DBNumeric `json:"price" binding:"required" format:""`
+	Price                DBNumeric `json:"price" binding:"required"`
 	VolumeTokens         DBNumeric `json:"volumeTokens" binding:"required"`
 	VolumeUSD            DBNumeric `json:"volumeUSD" binding:"required"`
 	BlockchainTransferID int
@@ -173,7 +181,7 @@ type Token struct {
 }
 
 const (
- Aave = "Aave"
+	Aave = "Aave"
 )
 
 type DeFiPlatform struct {
@@ -181,7 +189,7 @@ type DeFiPlatform struct {
 	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
 	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
 	Name    string `json:"name" binding:"required"`
-	Type string `json:"type" binding:"required"`
+	Type    string `json:"type" binding:"required"`
 }
 
 type TrackedWallet struct {

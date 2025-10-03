@@ -17,8 +17,21 @@ import (
 )
 
 type HODLHandler struct {
-	token ERC20
-	rdb   *redis.Client
+	token          ERC20
+	rdb            *redis.Client
+	parallelFactor int
+}
+
+func NewHODLHandler(client *ethclient.Client, token trade.Token, rdb *redis.Client, parallelFactor int) (*HODLHandler, error) {
+	erc20, err := NewERC20(client, token)
+	if err != nil {
+		return nil, err
+	}
+	return &HODLHandler{
+		token:          *erc20,
+		rdb:            rdb,
+		parallelFactor: parallelFactor,
+	}, nil
 }
 
 func (h *HODLHandler) FetchBlockchainInteractions(
@@ -62,15 +75,15 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 	}
 	allLogs := append(logsParticipantsSenders, logsParticipantsRecipients...)
 	slog.Info(fmt.Sprintf("Scanned %d transfers", len(allLogs)))
-	logsChunks := lo.Chunk(allLogs, ParallelFactor)
+	logsChunks := lo.Chunk(allLogs, h.ParallelFactor())
 	resultCh := make(chan trade.ERC20Transfer)
 	result := make([]trade.ERC20Transfer, len(allLogs))
 
 	var wg sync.WaitGroup
-	wg.Add(ParallelFactor)
+	wg.Add(h.ParallelFactor())
 
 	go func() {
-		for i := range ParallelFactor {
+		for i := range h.ParallelFactor() {
 			go func() {
 				defer wg.Done()
 				for _, event := range logsChunks[i] {
@@ -102,6 +115,8 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 
 }
 
+func (h *HODLHandler) ParallelFactor() int { return h.parallelFactor }
+
 func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer) ([]trade.Deal, error) {
 
 	result := make([]trade.Deal, len(interactions))
@@ -118,9 +133,9 @@ func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer
 
 		volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
 		deal := trade.Deal{
-			Price:              trade.DBNumeric{closePrice},
-			VolumeUSD:          trade.DBNumeric{volumeUSD},
-			VolumeTokens:       trade.DBNumeric{volumeToken},
+			Price:              trade.NewDBNumeric(closePrice),
+			VolumeUSD:          trade.NewDBNumeric(volumeUSD),
+			VolumeTokens:       trade.NewDBNumeric(volumeToken),
 			BlockchainTransfer: transfer,
 		}
 		result = append(result, deal)
@@ -130,16 +145,4 @@ func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer
 
 func (h *HODLHandler) Name() string {
 	return h.token.Info.Symbol
-}
-
-func NewHODLHandler(client *ethclient.Client, token trade.Token, rdb *redis.Client) (*HODLHandler, error) {
-	erc20, err := NewERC20(client, token)
-	if err != nil {
-		return nil, err
-	}
-	return &HODLHandler{
-		token: *erc20,
-		rdb:   rdb,
-	}, nil
-
 }
