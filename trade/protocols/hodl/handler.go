@@ -74,6 +74,9 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 		return []trade.ERC20Transfer{}, err
 	}
 	allLogs := append(logsParticipantsSenders, logsParticipantsRecipients...)
+	if len(allLogs) == 0 {
+		return []trade.ERC20Transfer{}, nil
+	}
 	slog.Info(fmt.Sprintf("Scanned %d transfers", len(allLogs)))
 	logsChunks := lo.Chunk(allLogs, h.ParallelFactor())
 	resultCh := make(chan trade.ERC20Transfer)
@@ -86,6 +89,9 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 		for i := range h.ParallelFactor() {
 			go func() {
 				defer wg.Done()
+				if i >= len(logsChunks) {
+					return
+				}
 				for _, event := range logsChunks[i] {
 					sender := common.BytesToAddress(event.Topics[1].Bytes()).Hex()
 					recipient := common.BytesToAddress(event.Topics[2].Bytes()).Hex()
@@ -118,19 +124,14 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 func (h *HODLHandler) ParallelFactor() int { return h.parallelFactor }
 
 func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer) ([]trade.Deal, error) {
-
 	result := make([]trade.Deal, len(interactions))
-
-	for _, transfer := range interactions {
-
+	for i, transfer := range interactions {
 		closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, h.token.Info.Symbol, &transfer.Timestamp)
 		if err != nil {
 			return nil, err
 		}
-
 		volumeToken := big.NewRat(1, 1)
 		volumeToken = volumeToken.SetFrac(transfer.Amount.Int, new(big.Int).Exp(big.NewInt(10), h.token.Info.Decimals.Int, nil))
-
 		volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
 		deal := trade.Deal{
 			Price:              trade.NewDBNumeric(closePrice),
@@ -138,7 +139,7 @@ func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer
 			VolumeTokens:       trade.NewDBNumeric(volumeToken),
 			BlockchainTransfer: transfer,
 		}
-		result = append(result, deal)
+		result[i] = deal
 	}
 	return result, nil
 }

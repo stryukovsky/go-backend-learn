@@ -8,9 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
-	"github.com/stryukovsky/go-backend-learn/trade/cache"
-	"github.com/stryukovsky/go-backend-learn/trade/worker"
 	"github.com/stryukovsky/go-backend-learn/trade/api"
+	"github.com/stryukovsky/go-backend-learn/trade/cache"
+	"github.com/stryukovsky/go-backend-learn/trade/database"
+	"github.com/stryukovsky/go-backend-learn/trade/worker"
 	"github.com/urfave/cli/v3"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -45,7 +46,7 @@ func main() {
 				Name:  "load",
 				Usage: "Load fixture to database",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					Fixture(db)
+					database.Fixture(db)
 					return nil
 				},
 			},
@@ -53,7 +54,7 @@ func main() {
 				Name:  "migrate",
 				Usage: "migrate database",
 				Action: func(ctx context.Context, c *cli.Command) error {
-					return db.AutoMigrate(
+					err := db.AutoMigrate(
 						&trade.Deal{},
 						&trade.ERC20Transfer{},
 						&trade.Worker{},
@@ -64,6 +65,15 @@ func main() {
 						&trade.AaveInteraction{},
 						&trade.DeFiPlatform{},
 					)
+					if err != nil {
+						return err
+					}
+					err = db.Exec("ALTER TABLE aave_events ADD CONSTRAINT aave_events__chain_id__tx_id UNIQUE (chain_id, tx_id);").Error
+					if err != nil {
+						return err
+					}
+					err = db.Exec("ALTER TABLE erc20_transfers ADD CONSTRAINT erc20_transfers__chain_id__tx_id UNIQUE (chain_id, tx_id);").Error
+					return err
 				},
 			},
 			{

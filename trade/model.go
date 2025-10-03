@@ -64,6 +64,10 @@ type DBInt struct {
 	*big.Int
 }
 
+func NewDBInt(value *big.Int) DBInt {
+	return DBInt{value}
+}
+
 // Scan implements sql.Scanner interface
 func (b *DBInt) Scan(value any) error {
 	if value == nil {
@@ -120,10 +124,27 @@ type AaveEvent struct {
 	TokenAddress  string    `json:"tokenAddress" binding:"required"`
 	Amount        DBInt     `json:"amount" binding:"required"`
 	Timestamp     time.Time `json:"timestamp" binding:"required"`
+	TxId          string    `json:"txId" binding:"required"`
 }
 
-func NewAaveEvent(chainId string, direction string, walletAddress common.Address, amount *big.Int, timestamp time.Time) AaveEvent {
-	return AaveEvent{ChainId: chainId, Direction: direction, WalletAddress: walletAddress.Hex(), Amount: DBInt{amount}, Timestamp: timestamp}
+func NewAaveEvent(
+	chainId string,
+	direction string,
+	walletAddress common.Address,
+	tokenAddress common.Address,
+	amount *big.Int,
+	timestamp time.Time,
+	txId string,
+) AaveEvent {
+	return AaveEvent{
+		ChainId:       chainId,
+		Direction:     direction,
+		WalletAddress: walletAddress.Hex(),
+		TokenAddress:  tokenAddress.Hex(),
+		Amount:        DBInt{amount},
+		Timestamp:     timestamp,
+		TxId:          txId,
+	}
 }
 
 type Deal struct {
@@ -153,7 +174,16 @@ type ERC20Transfer struct {
 	TxId         string    `json:"txId" gorm:"uniqueIndex" binding:"required"`
 }
 
-func NewERC20Transfer(address string, sender string, recipient string, amount *big.Int, block *big.Int, chainId string, timestamp *time.Time, txId string) ERC20Transfer {
+func NewERC20Transfer(
+	address string,
+	sender string,
+	recipient string,
+	amount *big.Int,
+	block *big.Int,
+	chainId string,
+	timestamp *time.Time,
+	txId string,
+) ERC20Transfer {
 	return ERC20Transfer{
 		TokenAddress: address,
 		Sender:       sender,

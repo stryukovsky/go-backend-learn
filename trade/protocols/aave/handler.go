@@ -47,28 +47,50 @@ func NewAaveHandler(
 }
 
 func (h *AaveHandler) parseSupplyEvents(chainId string, event *PoolSupplyIterator) ([]trade.AaveEvent, error) {
-	result := make([]trade.AaveEvent, 5)
+	result := make([]trade.AaveEvent, 0)
 	for event.Next() {
 		err := event.Error()
 		if err != nil {
 			return nil, err
 		}
 		timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Event.Raw.BlockNumber)
-		item := trade.NewAaveEvent(chainId, "supply", event.Event.OnBehalfOf, event.Event.Reserve.Big(), *timestamp)
+		if err != nil {
+			return nil, err
+		}
+		item := trade.NewAaveEvent(
+			chainId,
+			"supply",
+			event.Event.OnBehalfOf,
+			event.Event.Reserve,
+			event.Event.Amount,
+			*timestamp,
+			event.Event.Raw.TxHash.Hex(),
+		)
 		result = append(result, item)
 	}
 	return result, nil
 }
 
 func (h *AaveHandler) parseWithdrawEvents(chainId string, event *PoolWithdrawIterator) ([]trade.AaveEvent, error) {
-	result := make([]trade.AaveEvent, 5)
+	result := make([]trade.AaveEvent, 0)
 	for event.Next() {
 		err := event.Error()
 		if err != nil {
 			return nil, err
 		}
 		timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Event.Raw.BlockNumber)
-		item := trade.NewAaveEvent(chainId, "withdraw", event.Event.To, event.Event.Reserve.Big(), *timestamp)
+		if err != nil {
+			return nil, err
+		}
+		item := trade.NewAaveEvent(
+			chainId,
+			"withdraw",
+			event.Event.To,
+			event.Event.Reserve,
+			event.Event.Amount,
+			*timestamp,
+			event.Event.Raw.TxHash.Hex(),
+		)
 		result = append(result, item)
 	}
 	return result, nil
@@ -112,7 +134,7 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 
 func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([]trade.AaveInteraction, error) {
 	result := make([]trade.AaveInteraction, len(interactions))
-	for _, interaction := range interactions {
+	for i, interaction := range interactions {
 		tokenAddress := common.HexToAddress(interaction.TokenAddress)
 		token := trade.Token{}
 		for _, t := range h.tokens {
@@ -126,22 +148,23 @@ func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([
 			continue
 		}
 
-		closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, tokenAddress.Hex(), &interaction.Timestamp)
+		closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, token.Symbol, &interaction.Timestamp)
 		if err != nil {
 			return nil, err
 		}
 
 		volumeToken := big.NewRat(1, 1)
-		volumeToken = volumeToken.SetFrac(interaction.Amount.Int, new(big.Int).Exp(big.NewInt(10), token.Decimals.Int, nil))
+		decimalsMultiplier := new(big.Int).Exp(big.NewInt(10), token.Decimals.Int, nil)
+		volumeToken = volumeToken.SetFrac(interaction.Amount.Int, decimalsMultiplier)
 
 		volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
 		deal := trade.AaveInteraction{
 			Price:           trade.NewDBNumeric(closePrice),
-			VolumeUSD:       trade.NewDBNumeric(volumeUSD),
 			VolumeTokens:    trade.NewDBNumeric(volumeToken),
+			VolumeUSD:       trade.NewDBNumeric(volumeUSD),
 			BlockchainEvent: interaction,
 		}
-		result = append(result, deal)
+		result[i] = deal
 	}
 	return result, nil
 }

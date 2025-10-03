@@ -28,35 +28,40 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 	startFromBlock uint64,
 	currentBlockchainBlock uint64,
 	handlers []protocols.DeFiProtocolHandler[A, B],
-	participants []string) {
+	participants []string) error {
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(handlers), startFromBlock, endInBlock))
 	for _, handler := range handlers {
-		interactions, err := handler.FetchBlockchainInteractions(
+		blockchainInteractions, err := handler.FetchBlockchainInteractions(
 			chainId,
 			participants,
 			startFromBlock,
 			endInBlock,
 		)
+		if len(blockchainInteractions) > 0 {
+			db.Create(blockchainInteractions)
+		}
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch blockchain interactions: %s", handler.Name(), err.Error()))
+			return err
+		}
+		if len(blockchainInteractions) == 0 {
+			slog.Warn(fmt.Sprintf("[%s] No blockchain interactions found", handler.Name()))
 			continue
 		}
-		slog.Info(fmt.Sprintf("[%s] Found %d blockchain interactions where tracked wallets participated", handler.Name(), len(interactions)))
-		financialInteractions, err := handler.PopulateWithFinanceInfo(interactions)
+		slog.Info(fmt.Sprintf("[%s] Found %d blockchain interactions where tracked wallets participated", handler.Name(), len(blockchainInteractions)))
+		financialInteractions, err := handler.PopulateWithFinanceInfo(blockchainInteractions)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
-			continue
+			return err
 		}
 		err = db.Create(financialInteractions).Error
-		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot save financial interactions: %s", handler.Name(), err.Error()))
-			continue
-		}
 	}
+	return nil
 }
 
 func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
+	slog.Info("Starting worker")
 	var config trade.Worker
 	result := db.First(&config, id)
 	if result.Error != nil {
@@ -102,6 +107,12 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		participants = append(participants, wallet.Address)
 		minBlockOfWalletsToFetchFromNode = min(wallet.LastBlock, minBlockOfWalletsToFetchFromNode)
 	}
+	if minBlockOfWalletsToFetchFromNode == math.MaxUint64 {
+		slog.Warn("Cannot determine where to start indexing. Maybe there is no tracked wallets?")
+		return
+	}
+	startBlock := minBlockOfWalletsToFetchFromNode
+	endBlock := min(startBlock+config.BlocksInterval, currentBlockchainBlock)
 
 	var erc20Handlers []protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
 	for _, token := range tokensFromDB {
@@ -136,13 +147,38 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 	}
 
 	if len(participants) > 0 {
-		fetchInteractionsFromEthJSONRPC(
+		err = fetchInteractionsFromEthJSONRPC(
 			chainId.String(),
 			db,
 			&config,
 			minBlockOfWalletsToFetchFromNode,
 			currentBlockchainBlock,
 			erc20Handlers,
-			participants)
+			participants,
+		)
+		if err != nil {
+			slog.Info(fmt.Sprintf("Cannot fetch ERC20 transfers due to %s", err.Error()))
+		}
+
+		err = fetchInteractionsFromEthJSONRPC(
+			chainId.String(),
+			db,
+			&config,
+			minBlockOfWalletsToFetchFromNode,
+			currentBlockchainBlock,
+			aaveHandlers,
+			participants,
+		)
+		if err != nil {
+			slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
+		}
+
+		if err == nil {
+			for i := range trackedWallets {
+				trackedWallets[i].LastBlock = endBlock
+			}
+			slog.Info(fmt.Sprintf("Successfully fetched blockchain events so mark wallets as indexed on block %d", endBlock))
+			db.Save(trackedWallets)
+		}
 	}
 }
