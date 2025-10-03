@@ -30,7 +30,6 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 	handlers []protocols.DeFiProtocolHandler[A, B],
 	participants []string) error {
 	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
-	slog.Info(fmt.Sprintf("Interacting with %d tokens. Find events from block %d to %d", len(handlers), startFromBlock, endInBlock))
 	for _, handler := range handlers {
 		blockchainInteractions, err := handler.FetchBlockchainInteractions(
 			chainId,

@@ -115,17 +115,28 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 	if err != nil {
 		return nil, err
 	}
-	withdrawEventsRaw, err := h.pool.filterer.FilterWithdraw(&bind.FilterOpts{}, []common.Address{}, []common.Address{}, formattedParticipants)
+	withdrawEventsRaw, err := h.pool.filterer.FilterWithdraw(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock}, []common.Address{}, []common.Address{}, formattedParticipants)
 	if err != nil {
 		return nil, err
 	}
 	defer supplyEventsRaw.Close()
 	defer withdrawEventsRaw.Close()
 	supplyEvents, err := h.parseSupplyEvents(chainId, supplyEventsRaw)
+	if len(supplyEvents) == 0 {
+		slog.Warn(fmt.Sprintf("[%s] no supply events in block range %d - %d", h.Name(), fromBlock, toBlock))
+	} else {
+		slog.Info(fmt.Sprintf("[%s] found %d supply events in block range %d - %d", h.Name(), len(supplyEvents), fromBlock, toBlock))
+	}
 	if err != nil {
 		return nil, err
 	}
 	withdrawEvents, err := h.parseWithdrawEvents(chainId, withdrawEventsRaw)
+	if len(withdrawEvents) == 0 {
+		slog.Warn(fmt.Sprintf("[%s] no withdraw events in block range %d - %d", h.Name(), fromBlock, toBlock))
+	} else {
+		slog.Info(fmt.Sprintf("[%s] found %d withdraw events in block range %d - %d", h.Name(), len(withdrawEvents), fromBlock, toBlock))
+	}
 	if err != nil {
 		return nil, err
 	}
