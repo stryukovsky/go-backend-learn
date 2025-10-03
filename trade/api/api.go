@@ -70,6 +70,22 @@ func ListChains(ctx *gin.Context, db *gorm.DB) {
 	ctx.JSON(http.StatusOK, chains)
 }
 
+func ListAaveInteractions(ctx *gin.Context, db *gorm.DB) {
+
+	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
+	chainId := ctx.Param("chainId")
+	var aaveInteractions []trade.AaveInteraction
+	err := db.Preload("BlockchainEvent").Find(
+		&aaveInteractions,
+		trade.AaveInteraction{BlockchainEvent: trade.AaveEvent{WalletAddress: wallet, ChainId: chainId}},
+	).Error
+	if err != nil {
+		apiErr(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, aaveInteractions)
+}
+
 func ListDealsByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
@@ -108,5 +124,8 @@ func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	})
 	router.GET("/api/deals/:chainId/:wallet", func(ctx *gin.Context) {
 		ListDealsByWalletAndChain(ctx, db)
+	})
+	router.GET("/api/aave/:chainId/:wallet", func(ctx *gin.Context) {
+		ListAaveInteractions(ctx, db)
 	})
 }
