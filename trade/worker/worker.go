@@ -39,7 +39,10 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 			endInBlock,
 		)
 		if len(blockchainInteractions) > 0 {
-			db.Create(blockchainInteractions)
+			err := db.Create(blockchainInteractions).Error
+			if err != nil {
+				slog.Warn(fmt.Sprintf("Cannot save some of blockchain interactions: %s", err.Error()))
+			}
 		}
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch blockchain interactions: %s", handler.Name(), err.Error()))
@@ -49,13 +52,19 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 			slog.Warn(fmt.Sprintf("[%s] No blockchain interactions found", handler.Name()))
 			continue
 		}
-		slog.Info(fmt.Sprintf("[%s] Found %d blockchain interactions where tracked wallets participated", handler.Name(), len(blockchainInteractions)))
+		slog.Info(fmt.Sprintf(
+			"[%s] Found %d blockchain interactions where tracked wallets participated",
+			handler.Name(),
+			len(blockchainInteractions)))
 		financialInteractions, err := handler.PopulateWithFinanceInfo(blockchainInteractions)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
 			return err
 		}
 		err = db.Create(financialInteractions).Error
+		if err != nil { 
+			slog.Warn(fmt.Sprintf("Cannot save some of financial interactions: %s", err.Error()))
+		}
 	}
 	return nil
 }
