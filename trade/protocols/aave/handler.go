@@ -1,15 +1,18 @@
 package aave
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math/big"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
+	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"gorm.io/gorm"
@@ -46,55 +49,79 @@ func NewAaveHandler(
 	}, nil
 }
 
-func (h *AaveHandler) parseSupplyEvents(chainId string, event *PoolSupplyIterator) ([]trade.AaveEvent, error) {
-	result := make([]trade.AaveEvent, 0)
-	for event.Next() {
-		err := event.Error()
-		if err != nil {
-			return nil, err
-		}
-		timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Event.Raw.BlockNumber)
-		if err != nil {
-			return nil, err
-		}
-		item := trade.NewAaveEvent(
-			chainId,
-			"supply",
-			event.Event.OnBehalfOf,
-			event.Event.Reserve,
-			event.Event.Amount,
-			*timestamp,
-			event.Event.Raw.TxHash.Hex(),
-		)
-		result = append(result, item)
+func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.AaveEvent, error) {
+	chunkSize := len(events) / h.ParallelFactor()
+	eventChunks := lo.Chunk(events, chunkSize)
+	var wg sync.WaitGroup
+	wg.Add(h.ParallelFactor())
+	valuesCh := make(chan trade.AaveEvent, h.ParallelFactor())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer ctx.Done()
+	for i, chunk := range eventChunks {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					slog.Info(fmt.Sprintf("[%s] Parsing %d-th chunk of Supply Events", h.Name(), i+1))
+					for _, generalEvent := range chunk {
+						switch generalEvent.(type) {
+						default:
+							slog.Info(fmt.Sprintf("unexpected event type in chunk of Supply Events"))
+						case PoolSupply:
+							var event PoolSupply = generalEvent.(PoolSupply)
+							timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
+							if err != nil {
+								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", err.Error()))
+								wg.Done()
+								cancel()
+							}
+							item := trade.NewAaveEvent(
+								chainId,
+								"supply",
+								event.OnBehalfOf,
+								event.Reserve,
+								event.Amount,
+								*timestamp,
+								event.Raw.TxHash.Hex(),
+							)
+							valuesCh <- item
+						case PoolWithdraw:
+							var event PoolWithdraw = generalEvent.(PoolWithdraw)
+							timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
+							if err != nil {
+								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", err.Error()))
+								wg.Done()
+								cancel()
+							}
+							item := trade.NewAaveEvent(
+								chainId,
+								"withdraw",
+								event.To,
+								event.Reserve,
+								event.Amount,
+								*timestamp,
+								event.Raw.TxHash.Hex(),
+							)
+							valuesCh <- item
+						}
+					}
+					wg.Done()
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	result := make([]trade.AaveEvent, len(events))
+	i := 0
+	for item := range valuesCh {
+		result[i] = item
+		i++
 	}
 	return result, nil
 }
 
-func (h *AaveHandler) parseWithdrawEvents(chainId string, event *PoolWithdrawIterator) ([]trade.AaveEvent, error) {
-	result := make([]trade.AaveEvent, 0)
-	for event.Next() {
-		err := event.Error()
-		if err != nil {
-			return nil, err
-		}
-		timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Event.Raw.BlockNumber)
-		if err != nil {
-			return nil, err
-		}
-		item := trade.NewAaveEvent(
-			chainId,
-			"withdraw",
-			event.Event.To,
-			event.Event.Reserve,
-			event.Event.Amount,
-			*timestamp,
-			event.Event.Raw.TxHash.Hex(),
-		)
-		result = append(result, item)
-	}
-	return result, nil
-}
 
 func (h *AaveHandler) FetchBlockchainInteractions(
 	chainId string,
@@ -106,7 +133,7 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 	for i, p := range participants {
 		formattedParticipants[i] = common.HexToAddress(p)
 	}
-	supplyEventsRaw, err := h.pool.filterer.FilterSupply(
+	supplyEventsIter, err := h.pool.filterer.FilterSupply(
 		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
 		[]common.Address{},
 		formattedParticipants,
@@ -115,14 +142,30 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 	if err != nil {
 		return nil, err
 	}
-	withdrawEventsRaw, err := h.pool.filterer.FilterWithdraw(
+	defer supplyEventsIter.Close()
+	supplyEventsRaw := make([]any, 0)
+	for supplyEventsIter.Next() {
+		if err = supplyEventsIter.Error(); err != nil {
+			return nil, err
+		}
+		supplyEventsRaw = append(supplyEventsRaw, *supplyEventsIter.Event)
+	}
+	withdrawEventsIter, err := h.pool.filterer.FilterWithdraw(
 		&bind.FilterOpts{Start: fromBlock, End: &toBlock}, []common.Address{}, []common.Address{}, formattedParticipants)
 	if err != nil {
 		return nil, err
 	}
-	defer supplyEventsRaw.Close()
-	defer withdrawEventsRaw.Close()
-	supplyEvents, err := h.parseSupplyEvents(chainId, supplyEventsRaw)
+	// any is because go do not support generic methods, we have two types for each event: Supply and Withdraw
+	withdrawEventsRaw := make([]any, 0)
+	for withdrawEventsIter.Next() {
+		err := withdrawEventsIter.Error()
+		if err != nil {
+			return nil, err
+		}
+		withdrawEventsRaw = append(withdrawEventsRaw, *withdrawEventsIter.Event)
+	}
+	defer withdrawEventsIter.Close()
+	supplyEvents, err := h.parseAaveEvents(chainId, supplyEventsRaw)
 	if len(supplyEvents) == 0 {
 		slog.Warn(fmt.Sprintf("[%s] no supply events in block range %d - %d", h.Name(), fromBlock, toBlock))
 	} else {
@@ -131,7 +174,7 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 	if err != nil {
 		return nil, err
 	}
-	withdrawEvents, err := h.parseWithdrawEvents(chainId, withdrawEventsRaw)
+	withdrawEvents, err := h.parseAaveEvents(chainId, withdrawEventsRaw)
 	if len(withdrawEvents) == 0 {
 		slog.Warn(fmt.Sprintf("[%s] no withdraw events in block range %d - %d", h.Name(), fromBlock, toBlock))
 	} else {
