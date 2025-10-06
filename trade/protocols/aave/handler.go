@@ -66,14 +66,14 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 				default:
 					slog.Info(fmt.Sprintf("[%s] Parsing %d-th chunk of Supply Events", h.Name(), i+1))
 					for _, generalEvent := range chunk {
-						switch generalEvent.(type) {
+						switch generalEvent := generalEvent.(type) {
 						default:
-							slog.Info(fmt.Sprintf("unexpected event type in chunk of Supply Events"))
+							slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
 						case PoolSupply:
-							var event PoolSupply = generalEvent.(PoolSupply)
+							var event PoolSupply = generalEvent
 							timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
 							if err != nil {
-								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", err.Error()))
+								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(),err.Error()))
 								wg.Done()
 								cancel()
 							}
@@ -88,10 +88,10 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 							)
 							valuesCh <- item
 						case PoolWithdraw:
-							var event PoolWithdraw = generalEvent.(PoolWithdraw)
+							var event PoolWithdraw = generalEvent
 							timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
 							if err != nil {
-								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", err.Error()))
+								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
 								wg.Done()
 								cancel()
 							}
@@ -119,6 +119,7 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 		result[i] = item
 		i++
 	}
+	cancel()
 	return result, nil
 }
 

@@ -127,6 +127,12 @@ type AaveEvent struct {
 	TxId          string    `json:"txId" binding:"required"`
 }
 
+const (
+	UniswapV3Swap = "Swap"
+	UniswapV3Mint = "Mint"
+	UniswapV3Burn = "Burn"
+)
+
 func NewAaveEvent(
 	chainId string,
 	direction string,
@@ -142,6 +148,47 @@ func NewAaveEvent(
 		WalletAddress: walletAddress.Hex(),
 		TokenAddress:  tokenAddress.Hex(),
 		Amount:        DBInt{amount},
+		Timestamp:     timestamp,
+		TxId:          txId,
+	}
+}
+
+type UniswapV3Event struct {
+	gorm.Model
+	ChainId       string `json:"chainId" binding:"required"`
+	Type          string `json:"type" binding:"required"`
+	WalletAddress string `json:"walletAddress" binding:"required"`
+	PoolAddress   string `json:"poolAddress" binding:"required"`
+	AmountTokenA  DBInt  `json:"amountTokenA" binding:"required"`
+	AmountTokenB  DBInt  `json:"amountTokenB" binding:"required"`
+	// for swaps PriceLower == PriceUpper
+	PriceLower DBNumeric `json:"priceLower" binding:"required"`
+	PriceUpper DBNumeric `json:"priceUpper" binding:"required"`
+	Timestamp  time.Time `json:"timestamp" binding:"required"`
+	TxId       string    `json:"txId" binding:"required"`
+}
+
+func NewUniswapV3Event(
+	chainId string,
+	eventType string,
+	walletAddress string,
+	poolAddress string,
+	amountTokenA *big.Int,
+	amountTokenB *big.Int,
+	priceLower *big.Rat,
+	priceUpper *big.Rat,
+	timestamp time.Time,
+	txId string,
+) UniswapV3Event {
+	return UniswapV3Event{
+		ChainId:       chainId,
+		Type:          eventType,
+		WalletAddress: walletAddress,
+		PoolAddress:   poolAddress,
+		AmountTokenA:  NewDBInt(amountTokenA),
+		AmountTokenB:  NewDBInt(amountTokenB),
+		PriceLower:    NewDBNumeric(priceLower),
+		PriceUpper:    NewDBNumeric(priceUpper),
 		Timestamp:     timestamp,
 		TxId:          txId,
 	}
@@ -211,7 +258,8 @@ type Token struct {
 }
 
 const (
-	Aave = "Aave"
+	Aave      = "Aave"
+	UniswapV3 = "UniswapV3"
 )
 
 type DeFiPlatform struct {
