@@ -194,6 +194,35 @@ func NewUniswapV3Event(
 	}
 }
 
+type UniswapV3Deal struct {
+	gorm.Model
+	PriceTokenA        DBNumeric `json:"priceTokenA" binding:"required"`
+	PriceTokenB        DBNumeric `json:"priceTokenB" binding:"required"`
+	VolumeTokensAInUSD DBNumeric `json:"volumeTokensAInUSD" binding:"required"`
+	VolumeTokensBInUSD DBNumeric `json:"volumeTokensBInUSD" binding:"required"`
+	VolumeTotalUSD     DBNumeric `json:"volumeTotalUSD" binding:"required"`
+	BlockchainEventID  int
+	BlockchainEvent    UniswapV3Event `json:"blockchainEvent" binding:"required"`
+}
+
+func NewUniswapV3Deal(
+	priceTokenA *big.Rat,
+	priceTokenB *big.Rat,
+	volumeTokensAInUSD *big.Rat,
+	volumeTokensBInUSD *big.Rat,
+	volumeTotalUSD *big.Rat,
+	blockchainEvent UniswapV3Event,
+) UniswapV3Deal {
+	return UniswapV3Deal{
+		PriceTokenA:        NewDBNumeric(priceTokenA),
+		PriceTokenB:        NewDBNumeric(priceTokenB),
+		VolumeTokensAInUSD: NewDBNumeric(volumeTokensAInUSD),
+		VolumeTokensBInUSD: NewDBNumeric(volumeTokensBInUSD),
+		VolumeTotalUSD:     NewDBNumeric(volumeTotalUSD),
+		BlockchainEvent:    blockchainEvent,
+	}
+}
+
 type Deal struct {
 	gorm.Model
 	Price                DBNumeric `json:"price" binding:"required"`
