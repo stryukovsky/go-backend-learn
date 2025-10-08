@@ -7,7 +7,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
-	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/api"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"github.com/stryukovsky/go-backend-learn/trade/database"
@@ -54,25 +53,7 @@ func main() {
 				Name:  "migrate",
 				Usage: "migrate database",
 				Action: func(ctx context.Context, c *cli.Command) error {
-					err := db.AutoMigrate(
-						&trade.Deal{},
-						&trade.ERC20Transfer{},
-						&trade.Worker{},
-						&trade.Token{},
-						&trade.TrackedWallet{},
-						&trade.Chain{},
-						&trade.AaveEvent{},
-						&trade.AaveInteraction{},
-						&trade.DeFiPlatform{},
-					)
-					if err != nil {
-						return err
-					}
-					err = db.Exec("ALTER TABLE aave_events ADD CONSTRAINT aave_events__chain_id__tx_id UNIQUE (chain_id, tx_id);").Error
-					if err != nil {
-						return err
-					}
-					err = db.Exec("ALTER TABLE erc20_transfers ADD CONSTRAINT erc20_transfers__chain_id__tx_id UNIQUE (chain_id, tx_id);").Error
+					err := database.Migrate(db)
 					return err
 				},
 			},

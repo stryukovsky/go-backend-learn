@@ -127,12 +127,6 @@ type AaveEvent struct {
 	TxId          string    `json:"txId" binding:"required"`
 }
 
-const (
-	UniswapV3Swap = "Swap"
-	UniswapV3Mint = "Mint"
-	UniswapV3Burn = "Burn"
-)
-
 func NewAaveEvent(
 	chainId string,
 	direction string,
@@ -152,6 +146,12 @@ func NewAaveEvent(
 		TxId:          txId,
 	}
 }
+
+const (
+	UniswapV3Swap = "Swap"
+	UniswapV3Mint = "Mint"
+	UniswapV3Burn = "Burn"
+)
 
 type UniswapV3Event struct {
 	gorm.Model
@@ -196,28 +196,40 @@ func NewUniswapV3Event(
 
 type UniswapV3Deal struct {
 	gorm.Model
+	SymbolA string `json:"tickerA" binding:"required"`
+	SymbolB string `json:"tickerB" binding:"required"`
 	PriceTokenA        DBNumeric `json:"priceTokenA" binding:"required"`
 	PriceTokenB        DBNumeric `json:"priceTokenB" binding:"required"`
 	VolumeTokensAInUSD DBNumeric `json:"volumeTokensAInUSD" binding:"required"`
 	VolumeTokensBInUSD DBNumeric `json:"volumeTokensBInUSD" binding:"required"`
+	VolumeTokensA      DBNumeric `json:"volumeTokensA" binding:"required"`
+	VolumeTokensB      DBNumeric `json:"volumeTokensB" binding:"required"`
 	VolumeTotalUSD     DBNumeric `json:"volumeTotalUSD" binding:"required"`
 	BlockchainEventID  int
 	BlockchainEvent    UniswapV3Event `json:"blockchainEvent" binding:"required"`
 }
 
 func NewUniswapV3Deal(
+	tickerA string,
+	tickerB string,
 	priceTokenA *big.Rat,
 	priceTokenB *big.Rat,
 	volumeTokensAInUSD *big.Rat,
 	volumeTokensBInUSD *big.Rat,
+	volumeTokensA *big.Rat,
+	volumeTokensB *big.Rat,
 	volumeTotalUSD *big.Rat,
 	blockchainEvent UniswapV3Event,
 ) UniswapV3Deal {
 	return UniswapV3Deal{
+		SymbolA: tickerA,
+		SymbolB: tickerB,
 		PriceTokenA:        NewDBNumeric(priceTokenA),
 		PriceTokenB:        NewDBNumeric(priceTokenB),
 		VolumeTokensAInUSD: NewDBNumeric(volumeTokensAInUSD),
 		VolumeTokensBInUSD: NewDBNumeric(volumeTokensBInUSD),
+		VolumeTokensA:      NewDBNumeric(volumeTokensA),
+		VolumeTokensB:      NewDBNumeric(volumeTokensB),
 		VolumeTotalUSD:     NewDBNumeric(volumeTotalUSD),
 		BlockchainEvent:    blockchainEvent,
 	}
@@ -235,7 +247,7 @@ type Deal struct {
 type Chain struct {
 	gorm.Model
 	Name    string `json:"name" binding:"required"`
-	ChainId string `json:"ChainId" binding:"required"`
+	ChainId string `json:"ChainId" binding:"required" gorm:"uniqueIndex"`
 }
 
 type ERC20Transfer struct {

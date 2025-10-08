@@ -38,14 +38,25 @@ func NewUniswapV3PoolHandler(
 	client *ethclient.Client,
 	rdb *redis.Client,
 	db *gorm.DB,
-	tokenA trade.Token,
-	tokenB trade.Token,
 	parallelFactor int,
 ) (*UniswapV3PoolHandler, error) {
 	pool, err := NewUniswapV3PoolInstance(client, instance.Address)
 	if err != nil {
 		return nil, err
 	}
+	tokenAddressA, err := pool.caller.Token0(nil)
+	if err != nil {
+		return nil, err
+	}
+	tokenAddressB, err := pool.caller.Token1(nil)
+	if err != nil {
+		return nil, err
+	}
+	var tokenA trade.Token
+	db.First(&tokenA, trade.Token{ChainId: instance.ChainId, Address: tokenAddressA.Hex()})
+	var tokenB trade.Token
+	db.First(&tokenB, trade.Token{ChainId: instance.ChainId, Address: tokenAddressB.Hex()})
+
 	return &UniswapV3PoolHandler{
 		pool:           *pool,
 		rdb:            rdb,
@@ -179,7 +190,7 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 	}
 	result := trade.NewUniswapV3Event(
 		h.chainId,
-		trade.UniswapV3Burn,
+		trade.UniswapV3Swap,
 		event.Sender.Hex(),
 		h.pool.Address.Hex(),
 		event.Amount0,
@@ -204,9 +215,9 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 	var wg sync.WaitGroup
 	wg.Add(chunksCount)
 	resultCh := make(chan trade.UniswapV3Event)
-	// func Chunk[T any, Slice ~[]T](collection Slice, size int) []Slice {
-	for _, chunk := range chunks {
+	for i, chunk := range chunks {
 		go func() {
+			slog.Info(fmt.Sprintf("[%s] Starting %d worker", h.Name(), i))
 			defer wg.Done()
 			select {
 			case <-ctx.Done():
@@ -240,13 +251,12 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 						continue
 					}
 				}
+				slog.Info(fmt.Sprintf("[%s] %d worker finished parsing events", h.Name(), i))
 			}
 		}()
 	}
 	results := make([]trade.UniswapV3Event, len(events))
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		select {
 		case <-ctx.Done():
 			return
@@ -259,6 +269,7 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 		}
 	}()
 	wg.Wait()
+	close(resultCh)
 	return results, nil
 }
 
@@ -299,18 +310,25 @@ func (h *UniswapV3PoolHandler) FetchBlockchainInteractions(
 	if err != nil {
 		return nil, err
 	}
-	events := make([]any, 0, 100)
+	eventsRaw := make([]any, 0, 100)
 	for mintEventsIter.Next() {
-		events = append(events, *mintEventsIter.Event)
+		eventsRaw = append(eventsRaw, *mintEventsIter.Event)
 	}
 	for burnEventsIter.Next() {
-		events = append(events, *burnEventsIter.Event)
+		eventsRaw = append(eventsRaw, *burnEventsIter.Event)
 	}
 	for swapEventsIter.Next() {
-		events = append(events, *swapEventsIter.Event)
+		eventsRaw = append(eventsRaw, *swapEventsIter.Event)
 	}
 
-	result, err := h.parseEvents(events)
+	if len(eventsRaw) == 0 {
+		slog.Warn(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
+		return make([]trade.UniswapV3Event, 0), nil
+	} else {
+		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
+	}
+
+	result, err := h.parseEvents(eventsRaw)
 	if err != nil {
 		return nil, err
 	}
@@ -318,31 +336,33 @@ func (h *UniswapV3PoolHandler) FetchBlockchainInteractions(
 
 }
 
-func (h *UniswapV3PoolHandler) humanVolumeOfToken(amount *big.Int, token *trade.Token, dealTime *time.Time) (*big.Rat, *big.Rat, error) {
+func (h *UniswapV3PoolHandler) humanVolumeOfToken(amount *big.Int, token *trade.Token, dealTime *time.Time) (*big.Rat, *big.Rat, *big.Rat, error) {
+	slog.Info(fmt.Sprintf("[%s] Get price at moment of time %s", h.Name(), dealTime.String()))
 	closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, token.Symbol, dealTime)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	decimalsMultiplier := new(big.Int).Exp(big.NewInt(10), token.Decimals.Int, nil)
 	volumeToken := new(big.Rat).SetFrac(amount, decimalsMultiplier)
 	volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
-	return volumeUSD, closePrice, nil
+	return volumeUSD, volumeToken, closePrice, nil
 }
 
 func (h *UniswapV3PoolHandler) PopulateWithFinanceInfo(interactions []trade.UniswapV3Event) ([]trade.UniswapV3Deal, error) {
 	result := make([]trade.UniswapV3Deal, len(interactions))
 	for i, interaction := range interactions {
-		volumeAInUSD, priceAInUSD, err := h.humanVolumeOfToken(interaction.AmountTokenA.Int, &h.tokenA, &interaction.Timestamp)
+		volumeAInUSD, volumeA, priceAInUSD, err := h.humanVolumeOfToken(interaction.AmountTokenA.Int, &h.tokenA, &interaction.Timestamp)
 		if err != nil {
 			return nil, err
 		}
-		volumeBInUSD, priceBInUSD, err := h.humanVolumeOfToken(interaction.AmountTokenB.Int, &h.tokenB, &interaction.Timestamp)
+
+		volumeBInUSD, volumeB, priceBInUSD, err := h.humanVolumeOfToken(interaction.AmountTokenB.Int, &h.tokenB, &interaction.Timestamp)
 		if err != nil {
 			return nil, err
 		}
 		volumeTotalUSD := new(big.Rat).Add(volumeAInUSD, volumeBInUSD)
-		deal := trade.NewUniswapV3Deal(priceAInUSD, priceBInUSD, volumeAInUSD, volumeBInUSD, volumeTotalUSD, interaction)
+		deal := trade.NewUniswapV3Deal(h.tokenA.Symbol, h.tokenB.Symbol, priceAInUSD, priceBInUSD, volumeAInUSD, volumeBInUSD, volumeA, volumeB, volumeTotalUSD, interaction)
 		result[i] = deal
 	}
 	return result, nil

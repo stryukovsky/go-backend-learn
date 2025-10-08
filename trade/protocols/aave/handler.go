@@ -144,47 +144,39 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 		return nil, err
 	}
 	defer supplyEventsIter.Close()
-	supplyEventsRaw := make([]any, 0)
-	for supplyEventsIter.Next() {
-		if err = supplyEventsIter.Error(); err != nil {
-			return nil, err
-		}
-		supplyEventsRaw = append(supplyEventsRaw, *supplyEventsIter.Event)
-	}
 	withdrawEventsIter, err := h.pool.filterer.FilterWithdraw(
 		&bind.FilterOpts{Start: fromBlock, End: &toBlock}, []common.Address{}, []common.Address{}, formattedParticipants)
 	if err != nil {
 		return nil, err
 	}
+	defer withdrawEventsIter.Close()
+
 	// any is because go do not support generic methods, we have two types for each event: Supply and Withdraw
-	withdrawEventsRaw := make([]any, 0)
+	eventsRaw := make([]any, 0)
+	for supplyEventsIter.Next() {
+		if err = supplyEventsIter.Error(); err != nil {
+			return nil, err
+		}
+		eventsRaw = append(eventsRaw, *supplyEventsIter.Event)
+	}
 	for withdrawEventsIter.Next() {
 		err := withdrawEventsIter.Error()
 		if err != nil {
 			return nil, err
 		}
-		withdrawEventsRaw = append(withdrawEventsRaw, *withdrawEventsIter.Event)
+		eventsRaw = append(eventsRaw, *withdrawEventsIter.Event)
 	}
-	defer withdrawEventsIter.Close()
-	supplyEvents, err := h.parseAaveEvents(chainId, supplyEventsRaw)
-	if len(supplyEvents) == 0 {
-		slog.Warn(fmt.Sprintf("[%s] no supply events in block range %d - %d", h.Name(), fromBlock, toBlock))
+	if len(eventsRaw) == 0 {
+		slog.Warn(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
+		return make([]trade.AaveEvent, 0), nil
 	} else {
-		slog.Info(fmt.Sprintf("[%s] found %d supply events in block range %d - %d", h.Name(), len(supplyEvents), fromBlock, toBlock))
+		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
 	}
+	events, err := h.parseAaveEvents(chainId, eventsRaw)
 	if err != nil {
 		return nil, err
 	}
-	withdrawEvents, err := h.parseAaveEvents(chainId, withdrawEventsRaw)
-	if len(withdrawEvents) == 0 {
-		slog.Warn(fmt.Sprintf("[%s] no withdraw events in block range %d - %d", h.Name(), fromBlock, toBlock))
-	} else {
-		slog.Info(fmt.Sprintf("[%s] found %d withdraw events in block range %d - %d", h.Name(), len(withdrawEvents), fromBlock, toBlock))
-	}
-	if err != nil {
-		return nil, err
-	}
-	return append(supplyEvents, withdrawEvents...), nil
+	return events, nil
 }
 
 func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([]trade.AaveInteraction, error) {

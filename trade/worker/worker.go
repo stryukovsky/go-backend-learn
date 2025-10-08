@@ -14,6 +14,7 @@ import (
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/aave"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/hodl"
+	"github.com/stryukovsky/go-backend-learn/trade/protocols/uniswapv3"
 	"gorm.io/gorm"
 )
 
@@ -154,34 +155,77 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		aaveHandlers = append(aaveHandlers, casted)
 	}
 
-	if len(participants) > 0 {
-		err = fetchInteractionsFromEthJSONRPC(
-			chainId.String(),
+	var uniswapV3Pools []trade.DeFiPlatform
+	err = db.Find(&uniswapV3Pools, &trade.DeFiPlatform{ChainId: chainId.String(), Type: trade.UniswapV3}).Error
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Cannot get UniswapV3 pools: %s", err.Error()))
+		return
+	}
+	var uniswapv3Handlers []protocols.DeFiProtocolHandler[trade.UniswapV3Event, trade.UniswapV3Deal]
+	for _, uniswapv3Instance := range uniswapV3Pools {
+		uniswapv3Handler, err := uniswapv3.NewUniswapV3PoolHandler(
+			uniswapv3Instance,
+			client,
+			rdb,
 			db,
-			&config,
-			minBlockOfWalletsToFetchFromNode,
-			currentBlockchainBlock,
-			erc20Handlers,
-			participants,
-		)
+			ParallelFactor,
+			)
 		if err != nil {
-			slog.Info(fmt.Sprintf("Cannot fetch ERC20 transfers due to %s", err.Error()))
+			slog.Warn(fmt.Sprintf("Cannot get uniswapv3 platform handler: %s", err.Error()))
+			continue
 		}
-
+		var casted protocols.DeFiProtocolHandler[trade.UniswapV3Event, trade.UniswapV3Deal]
+		casted = uniswapv3Handler
+		uniswapv3Handlers = append(uniswapv3Handlers, casted)
+	}
+	if len(participants) > 0 {
+		// tx := db.Begin()
+		tx := db
+		// err = fetchInteractionsFromEthJSONRPC(
+		// 	chainId.String(),
+		// 	tx,
+		// 	&config,
+		// 	minBlockOfWalletsToFetchFromNode,
+		// 	currentBlockchainBlock,
+		// 	erc20Handlers,
+		// 	participants,
+		// )
+		// if err != nil {
+		// 	slog.Info(fmt.Sprintf("Cannot fetch ERC20 transfers due to %s", err.Error()))
+		// }
+		//
+		// err = fetchInteractionsFromEthJSONRPC(
+		// 	chainId.String(),
+		// 	tx,
+		// 	&config,
+		// 	minBlockOfWalletsToFetchFromNode,
+		// 	currentBlockchainBlock,
+		// 	aaveHandlers,
+		// 	participants,
+		// )
+		// if err != nil {
+		// 	slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
+		// }
+		
 		err = fetchInteractionsFromEthJSONRPC(
 			chainId.String(),
-			db,
+			tx,
 			&config,
 			minBlockOfWalletsToFetchFromNode,
 			currentBlockchainBlock,
-			aaveHandlers,
+			uniswapv3Handlers,
 			participants,
 		)
 		if err != nil {
-			slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
+			slog.Info(fmt.Sprintf("Cannot fetch UniswapV3 interactions due to %s", err.Error()))
 		}
 
 		if err == nil {
+			// err = tx.Commit().Error
+			// if err != nil {
+			// 	panic(err)
+			// }
+
 			for i := range trackedWallets {
 				trackedWallets[i].LastBlock = endBlock
 			}
