@@ -203,6 +203,52 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 	return &result, nil
 }
 
+func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
+	chainId string,
+	fromBlock uint64,
+	toBlock uint64,
+) ([]trade.UniswapV3Event, error) {
+	mintEventsIter, err := h.pool.filterer.FilterMint(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	burnEventsIter, err := h.pool.filterer.FilterBurn(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	eventsRaw := make([]any, 0, 100)
+	for mintEventsIter.Next() {
+		eventsRaw = append(eventsRaw, *mintEventsIter.Event)
+	}
+	for burnEventsIter.Next() {
+		eventsRaw = append(eventsRaw, *burnEventsIter.Event)
+	}
+	if len(eventsRaw) == 0 {
+		slog.Warn(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
+		return make([]trade.UniswapV3Event, 0), nil
+	} else {
+		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
+	}
+
+	result, err := h.parseEvents(eventsRaw)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+
+}
+
+
 // events are of
 // UniswapV3PoolMint
 func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event, error) {

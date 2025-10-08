@@ -7,6 +7,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"github.com/stryukovsky/go-backend-learn/trade/analytics"
 	"github.com/stryukovsky/go-backend-learn/trade/api"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"github.com/stryukovsky/go-backend-learn/trade/database"
@@ -65,6 +66,15 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:  "analyze",
+				Usage: "Analyze UniswapV3",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					analytics.Analyze(22534000, 1000000, "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640", db, redis, 1)
+					return nil
+				},
+			},
+
 		}}
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		panic("Cannot parse command " + err.Error())
