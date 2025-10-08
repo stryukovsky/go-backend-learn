@@ -38,7 +38,7 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 		if err != redis.Nil {
 			return nil, err
 		}
-		slog.Info(fmt.Sprintf("Block %s is new, fetching its date from blockchain", blockIdentifierStr))
+		slog.Info(fmt.Sprintf("[Cache] Block %s is new, fetching its date from blockchain", blockIdentifierStr))
 
 		blockHeader, err := client.BlockByNumber(context.Background(), big.NewInt(int64(block)))
 		if err != nil {
@@ -48,14 +48,14 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 		blockTimestampString := fmt.Sprintf("%d", blockTimestamp)
 		err = rdb.Set(ctx, blockIdentifierStr, blockTimestampString, time.Hour*3).Err()
 		if err != nil {
-			slog.Warn(fmt.Sprintf("Cannot update value in cache %s=%s", blockIdentifierStr, blockTimestampString))
+			slog.Warn(fmt.Sprintf("[Cache] Cannot update value in cache %s=%s", blockIdentifierStr, blockTimestampString))
 			return nil, err
 		}
-		slog.Info(fmt.Sprintf("Written to cache pair %s = %s", blockIdentifierStr, blockTimestampString))
+		slog.Info(fmt.Sprintf("[Cache] Written to cache pair %s = %s", blockIdentifierStr, blockTimestampString))
 		result := time.Unix(int64(blockTimestamp), 0)
 		return &result, nil
 	}
-	slog.Info(fmt.Sprintf("Block %d is already cached with unix timestamp %s", block, timestampString))
+	slog.Info(fmt.Sprintf("[Cache] Block %d is already cached with unix timestamp %s", block, timestampString))
 	timestamp, err := strconv.ParseInt(timestampString, 10, 64)
 	if err != nil {
 		return nil, err
@@ -66,18 +66,18 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 
 func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.Time) (*big.Rat, error) {
 	instantString := fmt.Sprintf("%d", instant.UnixMilli())
-	identifierStr := fmt.Sprintf("quote_%s_%s", symbol, instantString)
+	identifierStr := fmt.Sprintf("quote:%s:%s", symbol, instantString)
 	quoteString, err := rdb.Get(ctx, identifierStr).Result()
 	if err != nil {
 		if err == redis.Nil {
 			price, err := binance.GetClosePrice(symbol, instant)
 			if err != nil {
-				slog.Warn(fmt.Sprintf("Cannot get price for symbol %s at instant %s: %s", symbol, instantString, err.Error()))
+				slog.Warn(fmt.Sprintf("[Cache] Cannot get price for symbol %s at instant %s: %s", symbol, instantString, err.Error()))
 				return nil, err
 			}
 			err = rdb.Set(ctx, identifierStr, price.String(), time.Hour*3).Err()
 			if err != nil {
-				slog.Warn(fmt.Sprintf("Cannot update in cache price of symbol %s at instant %s ms: %s", symbol, instantString, err.Error()))
+				slog.Warn(fmt.Sprintf("[Cache] Cannot update in cache price of symbol %s at instant %s ms: %s", symbol, instantString, err.Error()))
 				return nil, err
 			}
 			return price, nil
@@ -85,7 +85,7 @@ func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.
 		return nil, err
 	}
 
-	slog.Info(fmt.Sprintf("Key already cached %s = %s", identifierStr, quoteString))
+	slog.Info(fmt.Sprintf("[Cache] Key already cached %s = %s", identifierStr, quoteString))
 	quote, success := new(big.Rat).SetString(quoteString)
 	if !success {
 		return nil, BadRationalValue

@@ -81,9 +81,6 @@ func Adjustment2HumanPrice(adjustedPrice *big.Rat, token0 trade.Token, token1 tr
 }
 
 func Tick2Price(tick *big.Int, token0 trade.Token, token1 trade.Token) (*big.Rat, error) {
-	if tick.Sign() < 0 {
-		return nil, errors.New("Tick must be greater than or equal to zero")
-	}
 	if !tick.IsInt64() {
 		return nil, errors.New("Tick must be representable as an int64")
 	}
@@ -123,6 +120,9 @@ func (h *UniswapV3PoolHandler) parseMint(event UniswapV3PoolMint) (*trade.Uniswa
 		slog.Warn(fmt.Sprintf("[%s] Cannot get block timestamp from cache/blockchain: %s", h.Name(), err.Error()))
 		return nil, err
 	}
+	if timestamp.IsZero() {
+		slog.Warn(fmt.Sprintf("[%s] Block timestamp is zero", h.Name()))
+	}
 	result := trade.NewUniswapV3Event(
 		h.chainId,
 		trade.UniswapV3Mint,
@@ -158,6 +158,9 @@ func (h *UniswapV3PoolHandler) parseBurn(event UniswapV3PoolBurn) (*trade.Uniswa
 		slog.Warn(fmt.Sprintf("[%s] Cannot get block timestamp from cache/blockchain: %s", h.Name(), err.Error()))
 		return nil, err
 	}
+	if timestamp.IsZero() {
+		slog.Warn(fmt.Sprintf("[%s] Block timestamp is zero", h.Name()))
+	}
 	result := trade.NewUniswapV3Event(
 		h.chainId,
 		trade.UniswapV3Burn,
@@ -176,7 +179,7 @@ func (h *UniswapV3PoolHandler) parseBurn(event UniswapV3PoolBurn) (*trade.Uniswa
 func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.UniswapV3Event, error) {
 	price, err := SqrtPrice2Price(event.SqrtPriceX96, h.tokenA, h.tokenB)
 	if err != nil {
-		slog.Warn(fmt.Sprintf("[%s] Cannot parse price of burn event: %s", h.Name(), err.Error()))
+		slog.Warn(fmt.Sprintf("[%s] Cannot parse price of swap event: %s", h.Name(), err.Error()))
 		return nil, err
 	}
 	timestamp, err := cache.GetCachedBlockTimestamp(
@@ -187,6 +190,9 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 	if err != nil {
 		slog.Warn(fmt.Sprintf("[%s] Cannot get block timestamp from cache/blockchain: %s", h.Name(), err.Error()))
 		return nil, err
+	}
+	if timestamp.IsZero() {
+		slog.Warn(fmt.Sprintf("[%s] Block timestamp is zero", h.Name()))
 	}
 	result := trade.NewUniswapV3Event(
 		h.chainId,
@@ -248,7 +254,6 @@ func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
 
 }
 
-
 // events are of
 // UniswapV3PoolMint
 func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event, error) {
@@ -276,22 +281,25 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 						if err != nil {
 							cancel()
 							return
+						} else {
+							resultCh <- *parsedEvent
 						}
-						resultCh <- *parsedEvent
 					case UniswapV3PoolBurn:
 						parsedEvent, err := h.parseBurn(castedEvent)
 						if err != nil {
 							cancel()
 							return
+						} else {
+							resultCh <- *parsedEvent
 						}
-						resultCh <- *parsedEvent
 					case UniswapV3PoolSwap:
 						parsedEvent, err := h.parseSwap(castedEvent)
 						if err != nil {
 							cancel()
 							return
+						} else {
+							resultCh <- *parsedEvent
 						}
-						resultCh <- *parsedEvent
 					default:
 						slog.Info(fmt.Sprintf("[%s] Skip event of type %s since no parsing implemented for it", h.Name(), uncastedEvent))
 						continue

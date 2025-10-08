@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"time"
 )
 
@@ -49,6 +50,7 @@ func GetClosePrice(symbol string, instant *time.Time) (*big.Rat, error) {
 	if response.StatusCode != http.StatusOK {
 		slog.Warn(fmt.Sprintf("Cannot fetch quote from binance: %d %s", response.StatusCode, string(body)))
 		slog.Warn(fmt.Sprintf("Request was GET %s", urlString))
+		debug.PrintStack()
 		return nil, BinanceFetchFailed
 	}
 
