@@ -196,8 +196,8 @@ func NewUniswapV3Event(
 
 type UniswapV3Deal struct {
 	gorm.Model
-	SymbolA string `json:"tickerA" binding:"required"`
-	SymbolB string `json:"tickerB" binding:"required"`
+	SymbolA            string    `json:"symbolA" binding:"required"`
+	SymbolB            string    `json:"symbolB" binding:"required"`
 	PriceTokenA        DBNumeric `json:"priceTokenA" binding:"required"`
 	PriceTokenB        DBNumeric `json:"priceTokenB" binding:"required"`
 	VolumeTokensAInUSD DBNumeric `json:"volumeTokensAInUSD" binding:"required"`
@@ -222,8 +222,8 @@ func NewUniswapV3Deal(
 	blockchainEvent UniswapV3Event,
 ) UniswapV3Deal {
 	return UniswapV3Deal{
-		SymbolA: tickerA,
-		SymbolB: tickerB,
+		SymbolA:            tickerA,
+		SymbolB:            tickerB,
 		PriceTokenA:        NewDBNumeric(priceTokenA),
 		PriceTokenB:        NewDBNumeric(priceTokenB),
 		VolumeTokensAInUSD: NewDBNumeric(volumeTokensAInUSD),

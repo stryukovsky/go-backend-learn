@@ -301,7 +301,7 @@
         background: white;
         padding: 30px;
         border-radius: 16px;
-        max-width: 700px;
+        max-width: 900px;
         width: 90%;
         max-height: 80vh;
         overflow-y: auto;
@@ -500,14 +500,17 @@
                 >
                   <div class="activity-header">
                     <div class="activity-price">
-                      ${{ Math.max(activity.volumeTokensAInUSD, activity.volumeTokensBInUSD) }}
+                      ${{ Math.max(activity.volumeTokensAInUSD,
+                      activity.volumeTokensBInUSD) }}
                     </div>
                   </div>
                   <div class="activity-volume">
-                    Token A: {{ formatAmount(activity.volumeTokensAInUSD) }}
+                    {{activity.symbolA}}: {{
+                    formatAmount(activity.volumeTokensAInUSD) }}
                   </div>
                   <div class="activity-volume">
-                    Token B: {{ formatAmount(activity.volumeTokensBInUSD) }}
+                    {{activity.symbolB}}: {{
+                    formatAmount(activity.volumeTokensBInUSD) }}
                   </div>
                   <div class="activity-details">
                     {{ formatDate(activity.blockchainEvent.timestamp) }}
@@ -539,10 +542,12 @@
                     </div>
                   </div>
                   <div class="activity-volume">
-                    Token A: {{ formatAmount(activity.volumeTokensAInUSD) }}
+                    {{activity.symbolA}}: {{
+                    formatAmount(activity.volumeTokensAInUSD) }}
                   </div>
                   <div class="activity-volume">
-                    Token B: {{ formatAmount(activity.volumeTokensBInUSD) }}
+                    {{activity.symbolB}}: {{
+                    formatAmount(activity.volumeTokensBInUSD) }}
                   </div>
                   <div class="activity-details">
                     {{ formatDate(activity.blockchainEvent.timestamp) }}
@@ -574,10 +579,12 @@
                     </div>
                   </div>
                   <div class="activity-volume">
-                    Token A: {{ formatAmount(activity.volumeTokensAInUSD) }}
+                    {{activity.symbolA}}: {{
+                    formatAmount(activity.volumeTokensAInUSD) }}
                   </div>
                   <div class="activity-volume">
-                    Token B: {{ formatAmount(activity.volumeTokensBInUSD) }}
+                    {{activity.symbolB}}: {{
+                    formatAmount(activity.volumeTokensBInUSD) }}
                   </div>
                   <div class="activity-details">
                     {{ formatDate(activity.blockchainEvent.timestamp) }}
@@ -609,10 +616,12 @@
                     </div>
                   </div>
                   <div class="activity-volume">
-                    Token A: {{ formatAmount(activity.volumeTokensAInUSD) }}
+                    {{activity.symbolA}}: {{
+                    formatAmount(activity.volumeTokensAInUSD) }}
                   </div>
                   <div class="activity-volume">
-                    Token B: {{ formatAmount(activity.volumeTokensBInUSD) }}
+                    {{activity.symbolB}}: {{
+                    formatAmount(activity.volumeTokensBInUSD) }}
                   </div>
                   <div class="activity-details">
                     {{ formatDate(activity.blockchainEvent.timestamp) }}
@@ -642,19 +651,19 @@
             <span class="detail-value">{{ selectedActivity.ID }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">Price Token A:</span>
+            <span class="detail-label">Price {{selectedActivity.symbolA}}:</span>
             <span class="detail-value"
               >${{ selectedActivity.priceTokenA }}</span
             >
           </div>
           <div class="detail-row">
-            <span class="detail-label">Price Token B:</span>
+            <span class="detail-label">Price {{selectedActivity.symbolB}}:</span>
             <span class="detail-value"
               >${{ selectedActivity.priceTokenB }}</span
             >
           </div>
           <div class="detail-row">
-            <span class="detail-label">Volume Token A (USD):</span>
+            <span class="detail-label">Volume {{selectedActivity.symbolA}} (USD):</span>
             <span
               class="detail-value"
               :class="
@@ -664,7 +673,7 @@
             >
           </div>
           <div class="detail-row">
-            <span class="detail-label">Volume Token B (USD):</span>
+            <span class="detail-label">Volume {{selectedActivity.symbolB}} (USD):</span>
             <span
               class="detail-value"
               :class="
@@ -685,30 +694,30 @@
           <h3 style="margin: 20px 0 10px 0">🔗 Blockchain Event</h3>
           <div class="detail-row">
             <span class="detail-label">Event Type:</span>
-            <span class="detail-value">{{
-              selectedActivity.blockchainEvent.type
-            }}</span>
+            <span class="detail-value"
+              >{{ selectedActivity.blockchainEvent.type }}</span
+            >
           </div>
           <div class="detail-row">
             <span class="detail-label">Chain ID:</span>
-            <span class="detail-value">{{
-              selectedActivity.blockchainEvent.chainId
-            }}</span>
+            <span class="detail-value"
+              >{{ selectedActivity.blockchainEvent.chainId }}</span
+            >
           </div>
           <div class="detail-row">
             <span class="detail-label">Wallet Address:</span>
-            <span class="detail-value">{{
-              selectedActivity.blockchainEvent.walletAddress
-            }}</span>
+            <span class="detail-value"
+              >{{ selectedActivity.blockchainEvent.walletAddress }}</span
+            >
           </div>
           <div class="detail-row">
             <span class="detail-label">Pool Address:</span>
-            <span class="detail-value">{{
-              selectedActivity.blockchainEvent.poolAddress
-            }}</span>
+            <span class="detail-value"
+              >{{ selectedActivity.blockchainEvent.poolAddress }}</span
+            >
           </div>
           <div class="detail-row">
-            <span class="detail-label">Amount Token A:</span>
+            <span class="detail-label">Amount {{selectedActivity.symbolA}}:</span>
             <span
               class="detail-value"
               :class="
@@ -718,7 +727,7 @@
             >
           </div>
           <div class="detail-row">
-            <span class="detail-label">Amount Token B:</span>
+            <span class="detail-label">Amount {{selectedActivity.symbolB}}:</span>
             <span
               class="detail-value"
               :class="
@@ -729,27 +738,28 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">Price Lower:</span>
-            <span class="detail-value">{{
-              selectedActivity.blockchainEvent.priceLower
-            }}</span>
+            <span class="detail-value"
+              >{{ selectedActivity.blockchainEvent.priceLower }}</span
+            >
           </div>
           <div class="detail-row">
             <span class="detail-label">Price Upper:</span>
-            <span class="detail-value">{{
-              selectedActivity.blockchainEvent.priceUpper
-            }}</span>
+            <span class="detail-value"
+              >{{ selectedActivity.blockchainEvent.priceUpper }}</span
+            >
           </div>
           <div class="detail-row">
             <span class="detail-label">Transaction ID:</span>
-            <span class="detail-value">{{
-              selectedActivity.blockchainEvent.txId
-            }}</span>
+            <span class="detail-value"
+              >{{ selectedActivity.blockchainEvent.txId }}</span
+            >
           </div>
           <div class="detail-row">
             <span class="detail-label">Timestamp:</span>
-            <span class="detail-value">{{
-              formatDate(selectedActivity.blockchainEvent.timestamp)
-            }}</span>
+            <span class="detail-value"
+              >{{ formatDate(selectedActivity.blockchainEvent.timestamp)
+              }}</span
+            >
           </div>
         </div>
       </div>
