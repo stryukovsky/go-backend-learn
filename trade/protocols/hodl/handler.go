@@ -103,7 +103,7 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 						slog.Warn(fmt.Sprintf("Cannot fetch from cache or blockchain info on block %d timestamp: %s", event.BlockNumber, err.Error()))
 						continue
 					}
-					transfer := trade.NewERC20Transfer(h.token.Info.Address, sender, recipient, amount, block, chainId, timestamp, txId)
+					transfer := trade.NewERC20Transfer(h.token.Info.Address, sender, recipient, amount, block, chainId, timestamp, txId, event.Index)
 					resultCh <- transfer
 				}
 			}()

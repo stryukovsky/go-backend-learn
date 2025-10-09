@@ -1,8 +1,8 @@
 package cache
 
 import (
-	"context"
 	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -46,7 +46,7 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 		}
 		blockTimestamp := blockHeader.Time()
 		blockTimestampString := fmt.Sprintf("%d", blockTimestamp)
-		err = rdb.Set(ctx, blockIdentifierStr, blockTimestampString, time.Hour*3).Err()
+		err = rdb.Set(ctx, blockIdentifierStr, blockTimestampString, 0).Err()
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[Cache] Cannot update value in cache %s=%s", blockIdentifierStr, blockTimestampString))
 			return nil, err
@@ -65,17 +65,18 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 }
 
 func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.Time) (*big.Rat, error) {
-	instantString := fmt.Sprintf("%d", instant.UnixMilli())
+	truncated := instant.Truncate(5 * time.Minute)
+	instantString := fmt.Sprintf("%d", truncated.UnixMilli())
 	identifierStr := fmt.Sprintf("quote:%s:%s", symbol, instantString)
 	quoteString, err := rdb.Get(ctx, identifierStr).Result()
 	if err != nil {
 		if err == redis.Nil {
-			price, err := binance.GetClosePrice(symbol, instant)
+			price, err := binance.GetClosePrice(symbol, &truncated)
 			if err != nil {
 				slog.Warn(fmt.Sprintf("[Cache] Cannot get price for symbol %s at instant %s: %s", symbol, instantString, err.Error()))
 				return nil, err
 			}
-			err = rdb.Set(ctx, identifierStr, price.String(), time.Hour*3).Err()
+			err = rdb.Set(ctx, identifierStr, price.String(), 0).Err()
 			if err != nil {
 				slog.Warn(fmt.Sprintf("[Cache] Cannot update in cache price of symbol %s at instant %s ms: %s", symbol, instantString, err.Error()))
 				return nil, err

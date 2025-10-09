@@ -9,5 +9,3 @@ sleep 1
 go run . load
 sleep 1
 ./startredis.sh
-sleep 1
-./startevm.sh

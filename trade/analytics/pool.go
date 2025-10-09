@@ -124,13 +124,13 @@ func Analyze(startBlock uint64, blocksCount uint64, poolAddress string, db *gorm
 			slog.Warn(fmt.Sprintf("Cannot get tokens of config: %s", err.Error()))
 			return
 		}
-		endBlock := min(startBlock+config.BlocksInterval, lastBlockInBlockchain, lastBlockToAnalyze)
+		endBlock := min(currentBlock+config.BlocksInterval, lastBlockInBlockchain, lastBlockToAnalyze)
 		dbTx := db
 		err = fetchInteractionsFromEthJSONRPC(
 			chainId.String(),
 			dbTx,
 			&config,
-			startBlock,
+			currentBlock,
 			endBlock,
 			uniswapv3Handler,
 		)

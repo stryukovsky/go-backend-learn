@@ -118,13 +118,14 @@ type AaveInteraction struct {
 
 type AaveEvent struct {
 	gorm.Model
-	ChainId       string    `json:"chainId" binding:"required"`
+	ChainId       string    `json:"chainId" binding:"required" gorm:"uniqueIndex:aave_idx_event_uniqueness"`
 	Direction     string    `json:"direction" binding:"required"`
 	WalletAddress string    `json:"walletAddress" binding:"required"`
 	TokenAddress  string    `json:"tokenAddress" binding:"required"`
 	Amount        DBInt     `json:"amount" binding:"required"`
 	Timestamp     time.Time `json:"timestamp" binding:"required"`
-	TxId          string    `json:"txId" binding:"required"`
+	TxId          string    `json:"txId" binding:"required" gorm:"uniqueIndex:aave_idx_event_uniqueness"`
+	LogIndex      uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:aave_idx_event_uniqueness"`
 }
 
 func NewAaveEvent(
@@ -135,6 +136,7 @@ func NewAaveEvent(
 	amount *big.Int,
 	timestamp time.Time,
 	txId string,
+	logIndex uint,
 ) AaveEvent {
 	return AaveEvent{
 		ChainId:       chainId,
@@ -144,6 +146,7 @@ func NewAaveEvent(
 		Amount:        DBInt{amount},
 		Timestamp:     timestamp,
 		TxId:          txId,
+		LogIndex:      logIndex,
 	}
 }
 
@@ -155,7 +158,7 @@ const (
 
 type UniswapV3Event struct {
 	gorm.Model
-	ChainId       string `json:"chainId" binding:"required"`
+	ChainId       string `json:"chainId" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
 	Type          string `json:"type" binding:"required"`
 	WalletAddress string `json:"walletAddress" binding:"required"`
 	PoolAddress   string `json:"poolAddress" binding:"required"`
@@ -165,7 +168,8 @@ type UniswapV3Event struct {
 	PriceLower DBNumeric `json:"priceLower" binding:"required"`
 	PriceUpper DBNumeric `json:"priceUpper" binding:"required"`
 	Timestamp  time.Time `json:"timestamp" binding:"required"`
-	TxId       string    `json:"txId" binding:"required"`
+	TxId       string    `json:"txId" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
+	LogIndex   uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
 }
 
 func NewUniswapV3Event(
@@ -179,6 +183,7 @@ func NewUniswapV3Event(
 	priceUpper *big.Rat,
 	timestamp time.Time,
 	txId string,
+	logIndex uint,
 ) UniswapV3Event {
 	return UniswapV3Event{
 		ChainId:       chainId,
@@ -191,6 +196,7 @@ func NewUniswapV3Event(
 		PriceUpper:    NewDBNumeric(priceUpper),
 		Timestamp:     timestamp,
 		TxId:          txId,
+		LogIndex:      logIndex,
 	}
 }
 
@@ -255,11 +261,12 @@ type ERC20Transfer struct {
 	TokenAddress string    `json:"tokenAddress" binding:"required"`
 	Sender       string    `json:"sender" binding:"required"`
 	Recipient    string    `json:"recipient" binding:"required"`
-	Amount       DBInt     `json:"amount" binding:"required" gorm:"type:numeric(78,0)"`
+	Amount       DBInt     `json:"amount" binding:"required"`
 	Block        DBInt     `json:"blockNumber" binding:"required"`
-	ChainId      string    `json:"chainId" binding:"required"`
+	ChainId      string    `json:"chainId" binding:"required" gorm:"uniqueIndex:erc20_idx_event_uniqueness"`
 	Timestamp    time.Time `json:"timestamp" binding:"required"`
-	TxId         string    `json:"txId" gorm:"uniqueIndex" binding:"required"`
+	TxId         string    `json:"txId" binding:"required" gorm:"uniqueIndex:erc20_idx_event_uniqueness"`
+	LogIndex     uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:erc20_idx_event_uniqueness"`
 }
 
 func NewERC20Transfer(
@@ -271,6 +278,7 @@ func NewERC20Transfer(
 	chainId string,
 	timestamp *time.Time,
 	txId string,
+	logIndex uint,
 ) ERC20Transfer {
 	return ERC20Transfer{
 		TokenAddress: address,
@@ -281,6 +289,7 @@ func NewERC20Transfer(
 		ChainId:      chainId,
 		Timestamp:    *timestamp,
 		TxId:         txId,
+		LogIndex:     logIndex,
 	}
 }
 

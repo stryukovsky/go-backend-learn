@@ -134,6 +134,7 @@ func (h *UniswapV3PoolHandler) parseMint(event UniswapV3PoolMint) (*trade.Uniswa
 		lowerPrice,
 		*timestamp,
 		event.Raw.TxHash.Hex(),
+		event.Raw.Index,
 	)
 	return &result, nil
 }
@@ -172,6 +173,7 @@ func (h *UniswapV3PoolHandler) parseBurn(event UniswapV3PoolBurn) (*trade.Uniswa
 		lowerPrice,
 		*timestamp,
 		event.Raw.TxHash.Hex(),
+		event.Raw.Index,
 	)
 	return &result, nil
 }
@@ -205,6 +207,7 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 		price,
 		*timestamp,
 		event.Raw.TxHash.Hex(),
+		event.Raw.Index,
 	)
 	return &result, nil
 }
@@ -391,7 +394,6 @@ func (h *UniswapV3PoolHandler) FetchBlockchainInteractions(
 }
 
 func (h *UniswapV3PoolHandler) humanVolumeOfToken(amount *big.Int, token *trade.Token, dealTime *time.Time) (*big.Rat, *big.Rat, *big.Rat, error) {
-	slog.Info(fmt.Sprintf("[%s] Get price at moment of time %s", h.Name(), dealTime.String()))
 	closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, token.Symbol, dealTime)
 	if err != nil {
 		return nil, nil, nil, err
@@ -416,7 +418,18 @@ func (h *UniswapV3PoolHandler) PopulateWithFinanceInfo(interactions []trade.Unis
 			return nil, err
 		}
 		volumeTotalUSD := new(big.Rat).Add(volumeAInUSD, volumeBInUSD)
-		deal := trade.NewUniswapV3Deal(h.tokenA.Symbol, h.tokenB.Symbol, priceAInUSD, priceBInUSD, volumeAInUSD, volumeBInUSD, volumeA, volumeB, volumeTotalUSD, interaction)
+		deal := trade.NewUniswapV3Deal(
+			h.tokenA.Symbol,
+			h.tokenB.Symbol,
+			priceAInUSD,
+			priceBInUSD,
+			volumeAInUSD,
+			volumeBInUSD,
+			volumeA,
+			volumeB,
+			volumeTotalUSD,
+			interaction,
+		)
 		result[i] = deal
 	}
 	return result, nil

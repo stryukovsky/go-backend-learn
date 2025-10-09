@@ -73,7 +73,7 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 							var event PoolSupply = generalEvent
 							timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
 							if err != nil {
-								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(),err.Error()))
+								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
 								wg.Done()
 								cancel()
 							}
@@ -85,6 +85,7 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 								event.Amount,
 								*timestamp,
 								event.Raw.TxHash.Hex(),
+								event.Raw.Index,
 							)
 							valuesCh <- item
 						case PoolWithdraw:
@@ -103,6 +104,7 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 								event.Amount,
 								*timestamp,
 								event.Raw.TxHash.Hex(),
+								event.Raw.Index,
 							)
 							valuesCh <- item
 						}
@@ -122,7 +124,6 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 	cancel()
 	return result, nil
 }
-
 
 func (h *AaveHandler) FetchBlockchainInteractions(
 	chainId string,
