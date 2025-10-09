@@ -261,6 +261,9 @@ func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
 // UniswapV3PoolMint
 func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event, error) {
 	chunkSize := len(events) / h.ParallelFactor()
+	if chunkSize == 0 {
+		return []trade.UniswapV3Event{}, nil
+	}
 	chunks := lo.Chunk(events, chunkSize)
 	chunksCount := len(chunks)
 

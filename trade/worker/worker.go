@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
@@ -39,9 +40,17 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 			endInBlock,
 		)
 		if len(blockchainInteractions) > 0 {
-			err := db.Create(blockchainInteractions).Error
-			if err != nil {
-				slog.Warn(fmt.Sprintf("Cannot save some of blockchain interactions: %s", err.Error()))
+			for _, blockchainInteraction := range blockchainInteractions {
+				err = db.Create(&blockchainInteraction).Error
+				if err != nil {
+					slog.Warn(fmt.Sprintf("[%s] Cannot save blockchain interaction: %s", handler.Name(), err.Error()))
+					if _, ok := err.(*pgconn.PgError); ok {
+						// ignore error if duplicate
+						err = nil
+					} else {
+						return err
+					}
+				}
 			}
 		}
 		if err != nil {
@@ -61,9 +70,17 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 			slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
 			return err
 		}
-		err = db.Create(financialInteractions).Error
-		if err != nil { 
-			slog.Warn(fmt.Sprintf("Cannot save some of financial interactions: %s", err.Error()))
+		for _, financialInteraction := range financialInteractions {
+			err = db.Create(&financialInteraction).Error
+			if err != nil {
+				slog.Warn(fmt.Sprintf("[%s] Cannot save financial interaction: %s", handler.Name(), err.Error()))
+				if _, ok := err.(*pgconn.PgError); ok {
+					// ignore error if duplicate
+					err = nil
+				} else {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -169,7 +186,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 			rdb,
 			db,
 			ParallelFactor,
-			)
+		)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot get uniswapv3 platform handler: %s", err.Error()))
 			continue
@@ -206,7 +223,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		// if err != nil {
 		// 	slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
 		// }
-		
+
 		err = fetchInteractionsFromEthJSONRPC(
 			chainId.String(),
 			tx,

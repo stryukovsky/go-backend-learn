@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -15,6 +17,7 @@ import (
 	"github.com/urfave/cli/v3"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func Api(db *gorm.DB, cache *redis.Client) {
@@ -27,7 +30,18 @@ func Api(db *gorm.DB, cache *redis.Client) {
 }
 
 func main() {
-	db, err := gorm.Open(postgres.Open("postgresql://user:pass@localhost:5432/db"), &gorm.Config{})
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             time.Second,
+			LogLevel:                  logger.Error, // Only log errors, not queries
+			IgnoreRecordNotFoundError: false,
+			Colorful:                  false,
+		},
+	)
+	db, err := gorm.Open(postgres.Open("postgresql://user:pass@localhost:5432/db"), &gorm.Config{
+		Logger: newLogger,
+	})
 	if err != nil {
 		panic("Cannot start db connection" + err.Error())
 	}
@@ -74,7 +88,6 @@ func main() {
 					return nil
 				},
 			},
-
 		}}
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		panic("Cannot parse command " + err.Error())

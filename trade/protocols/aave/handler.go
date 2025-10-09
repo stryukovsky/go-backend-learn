@@ -51,6 +51,9 @@ func NewAaveHandler(
 
 func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.AaveEvent, error) {
 	chunkSize := len(events) / h.ParallelFactor()
+	if chunkSize == 0 {
+		return []trade.AaveEvent{}, nil
+	}
 	eventChunks := lo.Chunk(events, chunkSize)
 	var wg sync.WaitGroup
 	wg.Add(h.ParallelFactor())
