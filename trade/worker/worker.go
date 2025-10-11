@@ -26,18 +26,16 @@ const (
 func fetchInteractionsFromEthJSONRPC[A any, B any](
 	chainId string,
 	db *gorm.DB,
-	config *trade.Worker,
-	startFromBlock uint64,
-	currentBlockchainBlock uint64,
+	startBlock uint64,
+	endBlock uint64,
 	handlers []protocols.DeFiProtocolHandler[A, B],
 	participants []string) error {
-	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	for _, handler := range handlers {
 		blockchainInteractions, err := handler.FetchBlockchainInteractions(
 			chainId,
 			participants,
-			startFromBlock,
-			endInBlock,
+			startBlock,
+			endBlock,
 		)
 		if len(blockchainInteractions) > 0 {
 			for _, blockchainInteraction := range blockchainInteractions {
@@ -198,38 +196,35 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 	if len(participants) > 0 {
 		// tx := db.Begin()
 		tx := db
-		// err = fetchInteractionsFromEthJSONRPC(
-		// 	chainId.String(),
-		// 	tx,
-		// 	&config,
-		// 	minBlockOfWalletsToFetchFromNode,
-		// 	currentBlockchainBlock,
-		// 	erc20Handlers,
-		// 	participants,
-		// )
-		// if err != nil {
-		// 	slog.Info(fmt.Sprintf("Cannot fetch ERC20 transfers due to %s", err.Error()))
-		// }
-		//
-		// err = fetchInteractionsFromEthJSONRPC(
-		// 	chainId.String(),
-		// 	tx,
-		// 	&config,
-		// 	minBlockOfWalletsToFetchFromNode,
-		// 	currentBlockchainBlock,
-		// 	aaveHandlers,
-		// 	participants,
-		// )
-		// if err != nil {
-		// 	slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
-		// }
+		err = fetchInteractionsFromEthJSONRPC(
+			chainId.String(),
+			tx,
+			startBlock,
+			endBlock,
+			erc20Handlers,
+			participants,
+		)
+		if err != nil {
+			slog.Info(fmt.Sprintf("Cannot fetch ERC20 transfers due to %s", err.Error()))
+		}
 
 		err = fetchInteractionsFromEthJSONRPC(
 			chainId.String(),
 			tx,
-			&config,
-			minBlockOfWalletsToFetchFromNode,
-			currentBlockchainBlock,
+			startBlock,
+			endBlock,
+			aaveHandlers,
+			participants,
+		)
+		if err != nil {
+			slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
+		}
+
+		err = fetchInteractionsFromEthJSONRPC(
+			chainId.String(),
+			tx,
+			startBlock,
+			endBlock,
 			uniswapv3Handlers,
 			participants,
 		)

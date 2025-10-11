@@ -38,13 +38,16 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 		if err != redis.Nil {
 			return nil, err
 		}
-		slog.Info(fmt.Sprintf("[Cache] Block %s is new, fetching its date from blockchain", blockIdentifierStr))
+		slog.Debug(fmt.Sprintf("[Cache] Block %s is new, fetching its date from blockchain", blockIdentifierStr))
 
-		blockHeader, err := client.BlockByNumber(context.Background(), big.NewInt(int64(block)))
+		blockHeader, err := client.HeaderByNumber(context.Background(), big.NewInt(int64(block)))
 		if err != nil {
 			return nil, err
 		}
-		blockTimestamp := blockHeader.Time()
+		blockTimestamp := blockHeader.Time
+		if blockTimestamp <= 0 {
+			return nil, fmt.Errorf("[Cache] Invalid timestamp. Timestamp: %d", blockTimestamp)
+		}
 		blockTimestampString := fmt.Sprintf("%d", blockTimestamp)
 		err = rdb.Set(ctx, blockIdentifierStr, blockTimestampString, 0).Err()
 		if err != nil {
@@ -55,7 +58,7 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 		result := time.Unix(int64(blockTimestamp), 0)
 		return &result, nil
 	}
-	slog.Info(fmt.Sprintf("[Cache] Block %d is already cached with unix timestamp %s", block, timestampString))
+	slog.Debug(fmt.Sprintf("[Cache] Block %d is already cached with unix timestamp %s", block, timestampString))
 	timestamp, err := strconv.ParseInt(timestampString, 10, 64)
 	if err != nil {
 		return nil, err
@@ -86,7 +89,7 @@ func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.
 		return nil, err
 	}
 
-	slog.Info(fmt.Sprintf("[Cache] Key already cached %s = %s", identifierStr, quoteString))
+	slog.Debug(fmt.Sprintf("[Cache] Key already cached %s = %s", identifierStr, quoteString))
 	quote, success := new(big.Rat).SetString(quoteString)
 	if !success {
 		return nil, BadRationalValue
@@ -127,7 +130,7 @@ func GetCachedBalanceOfWallet(db *gorm.DB, rdb *redis.Client, walletAddress stri
 		if err != nil {
 			return nil, err
 		}
-		slog.Info(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), countOutcome, walletAddress))
+		slog.Debug(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), countOutcome, walletAddress))
 
 		balance := calculateBalance(dealsIncome, dealsOutcome)
 		cachedData, _ := json.Marshal(trade.BalanceAcrossAllChains{Address: walletAddress, Balance: balance})

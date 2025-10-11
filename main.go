@@ -84,7 +84,7 @@ func main() {
 				Name:  "analyze",
 				Usage: "Analyze UniswapV3",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					analytics.Analyze(22534000, 1000000, "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640", db, redis, 1)
+					analytics.Analyze(1000000, "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640", db, redis)
 					return nil
 				},
 			},

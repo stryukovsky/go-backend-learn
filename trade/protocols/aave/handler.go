@@ -62,58 +62,56 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 	defer ctx.Done()
 	for i, chunk := range eventChunks {
 		go func() {
-			for {
+			slog.Debug(fmt.Sprintf("[%s] Parsing %d-th chunk of Supply Events", h.Name(), i+1))
+			for _, generalEvent := range chunk {
 				select {
 				case <-ctx.Done():
 					return
 				default:
-					slog.Info(fmt.Sprintf("[%s] Parsing %d-th chunk of Supply Events", h.Name(), i+1))
-					for _, generalEvent := range chunk {
-						switch generalEvent := generalEvent.(type) {
-						default:
-							slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
-						case PoolSupply:
-							var event PoolSupply = generalEvent
-							timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
-							if err != nil {
-								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
-								wg.Done()
-								cancel()
-							}
-							item := trade.NewAaveEvent(
-								chainId,
-								"supply",
-								event.OnBehalfOf,
-								event.Reserve,
-								event.Amount,
-								*timestamp,
-								event.Raw.TxHash.Hex(),
-								event.Raw.Index,
-							)
-							valuesCh <- item
-						case PoolWithdraw:
-							var event PoolWithdraw = generalEvent
-							timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
-							if err != nil {
-								slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
-								wg.Done()
-								cancel()
-							}
-							item := trade.NewAaveEvent(
-								chainId,
-								"withdraw",
-								event.To,
-								event.Reserve,
-								event.Amount,
-								*timestamp,
-								event.Raw.TxHash.Hex(),
-								event.Raw.Index,
-							)
-							valuesCh <- item
+					switch generalEvent := generalEvent.(type) {
+					default:
+						slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
+					case PoolSupply:
+						var event PoolSupply = generalEvent
+						timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
+						if err != nil {
+							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
+							wg.Done()
+							cancel()
 						}
+						item := trade.NewAaveEvent(
+							chainId,
+							"supply",
+							event.OnBehalfOf,
+							event.Reserve,
+							event.Amount,
+							*timestamp,
+							event.Raw.TxHash.Hex(),
+							event.Raw.Index,
+						)
+						valuesCh <- item
+					case PoolWithdraw:
+						var event PoolWithdraw = generalEvent
+						timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
+						if err != nil {
+							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
+							wg.Done()
+							cancel()
+						}
+						item := trade.NewAaveEvent(
+							chainId,
+							"withdraw",
+							event.To,
+							event.Reserve,
+							event.Amount,
+							*timestamp,
+							event.Raw.TxHash.Hex(),
+							event.Raw.Index,
+						)
+						valuesCh <- item
 					}
-					wg.Done()
 				}
+				wg.Done()
 			}
 		}()
 	}

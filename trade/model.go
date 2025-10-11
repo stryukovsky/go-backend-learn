@@ -165,11 +165,12 @@ type UniswapV3Event struct {
 	AmountTokenA  DBInt  `json:"amountTokenA" binding:"required"`
 	AmountTokenB  DBInt  `json:"amountTokenB" binding:"required"`
 	// for swaps PriceLower == PriceUpper
-	PriceLower DBNumeric `json:"priceLower" binding:"required"`
-	PriceUpper DBNumeric `json:"priceUpper" binding:"required"`
-	Timestamp  time.Time `json:"timestamp" binding:"required"`
-	TxId       string    `json:"txId" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
-	LogIndex   uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
+	PriceLower  DBNumeric `json:"priceLower" binding:"required"`
+	PriceUpper  DBNumeric `json:"priceUpper" binding:"required"`
+	Timestamp   time.Time `json:"timestamp" binding:"required"`
+	TxId        string    `json:"txId" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
+	LogIndex    uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
+	BlockNumber uint64    `json:"blockNumber" binding:"required"`
 }
 
 func NewUniswapV3Event(
@@ -184,6 +185,7 @@ func NewUniswapV3Event(
 	timestamp time.Time,
 	txId string,
 	logIndex uint,
+	blockNumber uint64,
 ) UniswapV3Event {
 	return UniswapV3Event{
 		ChainId:       chainId,
@@ -197,6 +199,7 @@ func NewUniswapV3Event(
 		Timestamp:     timestamp,
 		TxId:          txId,
 		LogIndex:      logIndex,
+		BlockNumber:   blockNumber,
 	}
 }
 
@@ -297,6 +300,13 @@ type Worker struct {
 	gorm.Model
 	BlockchainUrl  string `json:"blockchainUrl" binding:"required"`
 	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
+}
+
+type AnalyticsWorker struct {
+	gorm.Model
+	BlockchainUrl  string `json:"blockchainUrl" binding:"required"`
+	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
+	LastBlock      uint64 `json:"lastBlock" binding:"required"`
 }
 
 type Token struct {

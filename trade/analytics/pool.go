@@ -3,12 +3,10 @@ package analytics
 import (
 	"context"
 	"fmt"
-	"strconv"
-
 	"log/slog"
+	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
@@ -23,73 +21,56 @@ const (
 func fetchInteractionsFromEthJSONRPC(
 	chainId string,
 	db *gorm.DB,
-	config *trade.Worker,
-	startFromBlock uint64,
-	currentBlockchainBlock uint64,
+	startBlock uint64,
+	endBlock uint64,
 	handler *uniswapv3.UniswapV3PoolHandler,
 ) error {
-	endInBlock := min(startFromBlock+config.BlocksInterval, currentBlockchainBlock)
 	blockchainInteractions, err := handler.FetchLiquidityInteractions(
 		chainId,
-		startFromBlock,
-		endInBlock,
+		startBlock,
+		endBlock,
 	)
-	if len(blockchainInteractions) > 0 {
-		for _, blockchainInteraction := range blockchainInteractions {
-			err = db.Create(&blockchainInteraction).Error
-			if err != nil {
-				slog.Warn(fmt.Sprintf("[%s] Cannot save blockchain interaction: %s", handler.Name(), err.Error()))
-				if _, ok := err.(*pgconn.PgError); ok {
-					// ignore error if duplicate
-					err = nil
-				} else {
-					return err
-				}
-			}
-		}
-	}
 	if err != nil {
 		slog.Warn(fmt.Sprintf("[%s] Cannot fetch blockchain interactions: %s", handler.Name(), err.Error()))
 		return err
 	}
 	if len(blockchainInteractions) == 0 {
-		slog.Warn(fmt.Sprintf("[%s] No blockchain interactions found", handler.Name()))
+		slog.Warn(fmt.Sprintf("[%s] No blockchain interactions", handler.Name()))
 		return nil
+	}
+	err = db.Save(blockchainInteractions).Error
+	if err != nil {
+		slog.Warn(fmt.Sprintf("[%s] Cannot save blockchain interactions: %s", handler.Name(), err.Error()))
+		return err
 	}
 	slog.Info(fmt.Sprintf(
 		"[%s] Found %d blockchain interactions where tracked wallets participated",
 		handler.Name(),
 		len(blockchainInteractions)))
-	financialInteractions, err := handler.PopulateWithFinanceInfo(blockchainInteractions)
+	financialInteractions, err := handler.PopulateWithFinanceInfoConcurrently(blockchainInteractions)
 	if err != nil {
 		slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
 		return err
 	}
-	for _, financialInteraction := range financialInteractions {
-		err = db.Create(&financialInteraction).Error
-		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot save financial interaction: %s", handler.Name(), err.Error()))
-			if _, ok := err.(*pgconn.PgError); ok {
-				// ignore error if duplicate
-				err = nil
-			} else {
-				return err
-			}
-		}
+	err = db.Save(financialInteractions).Error
+	if err != nil {
+		slog.Warn(fmt.Sprintf("[%s] Cannot save financial interactions: %s", handler.Name(), err.Error()))
+		return err
 	}
+
 	return nil
 }
 
-func Analyze(startBlock uint64, blocksCount uint64, poolAddress string, db *gorm.DB, rdb *redis.Client, id uint) {
-	lastBlockToAnalyze := startBlock + blocksCount
-	currentBlock := startBlock
+func Analyze(blocksCount uint64, poolAddress string, db *gorm.DB, rdb *redis.Client) {
 	slog.Info("Starting worker")
-	var config trade.Worker
-	result := db.First(&config, id)
+	var config trade.AnalyticsWorker
+	result := db.First(&config)
 	if result.Error != nil {
-		slog.Warn("No config with id " + strconv.Itoa(int(id)))
+		slog.Warn("No config")
 		return
 	}
+	startBlock := config.LastBlock
+	currentBlock := startBlock
 
 	client, err := ethclient.Dial(config.BlockchainUrl)
 	if err != nil {
@@ -129,7 +110,7 @@ func Analyze(startBlock uint64, blocksCount uint64, poolAddress string, db *gorm
 	casted = uniswapv3Handler
 	uniswapv3Handlers = append(uniswapv3Handlers, casted)
 
-	for currentBlock <= lastBlockToAnalyze {
+	for {
 		lastBlockInBlockchain, err := client.BlockNumber(context.Background())
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %s", err.Error()))
@@ -141,12 +122,16 @@ func Analyze(startBlock uint64, blocksCount uint64, poolAddress string, db *gorm
 			slog.Warn(fmt.Sprintf("Cannot get tokens of config: %s", err.Error()))
 			return
 		}
-		endBlock := min(currentBlock+config.BlocksInterval, lastBlockInBlockchain, lastBlockToAnalyze)
+		endBlock := min(currentBlock+config.BlocksInterval, lastBlockInBlockchain)
+		if endBlock-startBlock < 50 {
+			slog.Info("Seems we've reached the top of blockchain. Sleep for 3 minutes")
+			time.Sleep(3 * time.Minute)
+			continue
+		}
 		dbTx := db
 		err = fetchInteractionsFromEthJSONRPC(
 			chainId.String(),
 			dbTx,
-			&config,
 			currentBlock,
 			endBlock,
 			uniswapv3Handler,
@@ -155,7 +140,9 @@ func Analyze(startBlock uint64, blocksCount uint64, poolAddress string, db *gorm
 			slog.Info(fmt.Sprintf("Cannot fetch UniswapV3 interactions due to %s", err.Error()))
 			return
 		} else {
-			slog.Info(fmt.Sprintf("Successfully fetched blockchain events so mark wallets as indexed on block %d", endBlock))
+			slog.Info(fmt.Sprintf("Successfully fetched blockchain events so mark worker indexed on block %d", endBlock))
+			config.LastBlock = endBlock
+			db.Save(&config)
 			currentBlock = endBlock + 1
 		}
 	}

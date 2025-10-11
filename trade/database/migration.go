@@ -18,6 +18,7 @@ func Migrate(db *gorm.DB) error {
 		&trade.DeFiPlatform{},
 		&trade.UniswapV3Event{},
 		&trade.UniswapV3Deal{},
+		&trade.AnalyticsWorker{},
 	)
 	return err
 }

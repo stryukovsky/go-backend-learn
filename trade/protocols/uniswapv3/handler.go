@@ -135,6 +135,7 @@ func (h *UniswapV3PoolHandler) parseMint(event UniswapV3PoolMint) (*trade.Uniswa
 		*timestamp,
 		event.Raw.TxHash.Hex(),
 		event.Raw.Index,
+		event.Raw.BlockNumber,
 	)
 	return &result, nil
 }
@@ -174,6 +175,7 @@ func (h *UniswapV3PoolHandler) parseBurn(event UniswapV3PoolBurn) (*trade.Uniswa
 		*timestamp,
 		event.Raw.TxHash.Hex(),
 		event.Raw.Index,
+		event.Raw.BlockNumber,
 	)
 	return &result, nil
 }
@@ -208,6 +210,7 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 		*timestamp,
 		event.Raw.TxHash.Hex(),
 		event.Raw.Index,
+		event.Raw.BlockNumber,
 	)
 	return &result, nil
 }
@@ -274,13 +277,13 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 	resultCh := make(chan trade.UniswapV3Event)
 	for i, chunk := range chunks {
 		go func() {
-			slog.Info(fmt.Sprintf("[%s] Starting %d worker", h.Name(), i))
+			slog.Debug(fmt.Sprintf("[%s] Starting %d worker", h.Name(), i))
 			defer wg.Done()
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				for _, uncastedEvent := range chunk {
+			for _, uncastedEvent := range chunk {
+				select {
+				case <-ctx.Done():
+					return
+				default:
 					switch castedEvent := uncastedEvent.(type) {
 					case UniswapV3PoolMint:
 						parsedEvent, err := h.parseMint(castedEvent)
@@ -311,7 +314,7 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 						continue
 					}
 				}
-				slog.Info(fmt.Sprintf("[%s] %d worker finished parsing events", h.Name(), i))
+				slog.Debug(fmt.Sprintf("[%s] %d worker finished parsing events", h.Name(), i))
 			}
 		}()
 	}
@@ -408,6 +411,86 @@ func (h *UniswapV3PoolHandler) humanVolumeOfToken(amount *big.Int, token *trade.
 	return volumeUSD, volumeToken, closePrice, nil
 }
 
+func (h *UniswapV3PoolHandler) PopulateWithFinanceInfoConcurrently(interactions []trade.UniswapV3Event) ([]trade.UniswapV3Deal, error) {
+	chunkSize := len(interactions) / h.ParallelFactor()
+	if chunkSize == 0 {
+		return []trade.UniswapV3Deal{}, nil
+	}
+	resultCh := make(chan trade.UniswapV3Deal)
+	chunks := lo.Chunk(interactions, chunkSize)
+	var wg sync.WaitGroup
+	wg.Add(len(chunks))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for _, chunk := range chunks {
+		go func() {
+			defer wg.Done()
+			for _, interaction := range chunk {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					volumeAInUSD, volumeA, priceAInUSD, err := h.humanVolumeOfToken(
+						interaction.AmountTokenA.Int,
+						&h.tokenA,
+						&interaction.Timestamp,
+					)
+					if err != nil {
+						slog.Warn(fmt.Sprintf(
+							"[%s] Error on token %s volume and price calculation in USD: %s",
+							h.Name(),
+							h.tokenA.Symbol,
+							err.Error(),
+						))
+						cancel()
+						return
+					}
+
+					volumeBInUSD, volumeB, priceBInUSD, err := h.humanVolumeOfToken(interaction.AmountTokenB.Int, &h.tokenB, &interaction.Timestamp)
+					if err != nil {
+						slog.Warn(fmt.Sprintf("[%s] Error on token %s volume and price calculation in USD: %s", h.Name(), h.tokenB.Symbol, err.Error()))
+						cancel()
+						return
+					}
+					volumeTotalUSD := new(big.Rat).Add(volumeAInUSD, volumeBInUSD)
+					deal := trade.NewUniswapV3Deal(
+						h.tokenA.Symbol,
+						h.tokenB.Symbol,
+						priceAInUSD,
+						priceBInUSD,
+						volumeAInUSD,
+						volumeBInUSD,
+						volumeA,
+						volumeB,
+						volumeTotalUSD,
+						interaction,
+					)
+					resultCh <- deal
+				}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	result := make([]trade.UniswapV3Deal, len(interactions))
+	i := 0
+	for deal := range resultCh {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			result[i] = deal
+			i++
+		}
+	}
+	return result, nil
+}
+
+// two methods exist because we possibly can reach out of binance api limits if asking it too frequent
 func (h *UniswapV3PoolHandler) PopulateWithFinanceInfo(interactions []trade.UniswapV3Event) ([]trade.UniswapV3Deal, error) {
 	result := make([]trade.UniswapV3Deal, len(interactions))
 	for i, interaction := range interactions {
