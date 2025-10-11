@@ -13,7 +13,7 @@ func Fixture(db *gorm.DB) {
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28", LastBlock: 23152597})
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x49ecd0F2De4868E5130fdC2C45D4d97444B7c269", LastBlock: 23495633})
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af", LastBlock: 23153501})
-	
+
 	db.Create(
 		&trade.Token{
 			ChainId:  "1",
@@ -37,5 +37,10 @@ func Fixture(db *gorm.DB) {
 		})
 	db.Create(&trade.Chain{Name: "Ethereum mainnet", ChainId: "1"})
 	db.Create(&trade.DeFiPlatform{Type: trade.Aave, ChainId: "1", Address: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"})
-	db.Create(&trade.DeFiPlatform{Type: trade.UniswapV3, ChainId: "1", Address: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"})
+	db.Create(&trade.DeFiPlatform{
+		Type: trade.UniswapV3,
+		ChainId: "1",
+		Address: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+		ExtraContractAddress1: "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
+	})
 }

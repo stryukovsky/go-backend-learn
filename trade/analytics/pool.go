@@ -25,7 +25,7 @@ func fetchInteractionsFromEthJSONRPC(
 	endBlock uint64,
 	handler *uniswapv3.UniswapV3PoolHandler,
 ) error {
-	blockchainInteractions, err := handler.FetchLiquidityInteractions(
+	blockchainInteractions, mintedPositions, err := handler.FetchLiquidityInteractions(
 		chainId,
 		startBlock,
 		endBlock,
@@ -33,6 +33,13 @@ func fetchInteractionsFromEthJSONRPC(
 	if err != nil {
 		slog.Warn(fmt.Sprintf("[%s] Cannot fetch blockchain interactions: %s", handler.Name(), err.Error()))
 		return err
+	}
+	if len(mintedPositions) > 0 {
+		err = db.Save(mintedPositions).Error
+		if err != nil {
+			slog.Warn(fmt.Sprintf("[%s] Cannot save minted uniswapv3 positions: %s", handler.Name(), err.Error()))
+			return err
+		}
 	}
 	if len(blockchainInteractions) == 0 {
 		slog.Warn(fmt.Sprintf("[%s] No blockchain interactions", handler.Name()))

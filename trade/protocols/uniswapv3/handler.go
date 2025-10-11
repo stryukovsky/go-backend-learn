@@ -21,14 +21,15 @@ import (
 )
 
 type UniswapV3PoolHandler struct {
-	pool           UniswapV3PoolInstance
-	rdb            *redis.Client
-	db             *gorm.DB
-	name           string
-	tokenA         trade.Token
-	tokenB         trade.Token
-	parallelFactor int
-	chainId        string
+	pool            UniswapV3PoolInstance
+	positionManager NFPositionManagerInstance
+	rdb             *redis.Client
+	db              *gorm.DB
+	name            string
+	tokenA          trade.Token
+	tokenB          trade.Token
+	parallelFactor  int
+	chainId         string
 }
 
 func (h *UniswapV3PoolHandler) ParallelFactor() int { return h.parallelFactor }
@@ -41,6 +42,10 @@ func NewUniswapV3PoolHandler(
 	parallelFactor int,
 ) (*UniswapV3PoolHandler, error) {
 	pool, err := NewUniswapV3PoolInstance(client, instance.Address)
+	if err != nil {
+		return nil, err
+	}
+	nfPositionManager, err := NewNFPositionManagerInstance(client, instance.ExtraContractAddress1)
 	if err != nil {
 		return nil, err
 	}
@@ -58,14 +63,15 @@ func NewUniswapV3PoolHandler(
 	db.First(&tokenB, trade.Token{ChainId: instance.ChainId, Address: tokenAddressB.Hex()})
 
 	return &UniswapV3PoolHandler{
-		pool:           *pool,
-		rdb:            rdb,
-		db:             db,
-		name:           fmt.Sprintf("Uniswap V3 Pool %s - %s", tokenA.Symbol, tokenB.Symbol),
-		tokenA:         tokenA,
-		tokenB:         tokenB,
-		parallelFactor: parallelFactor,
-		chainId:        instance.ChainId,
+		pool:            *pool,
+		positionManager: *nfPositionManager,
+		rdb:             rdb,
+		db:              db,
+		name:            fmt.Sprintf("Uniswap V3 Pool %s - %s", tokenA.Symbol, tokenB.Symbol),
+		tokenA:          tokenA,
+		tokenB:          tokenB,
+		parallelFactor:  parallelFactor,
+		chainId:         instance.ChainId,
 	}, nil
 }
 
@@ -215,59 +221,61 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 	return &result, nil
 }
 
-func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
-	chainId string,
-	fromBlock uint64,
-	toBlock uint64,
-) ([]trade.UniswapV3Event, error) {
-	mintEventsIter, err := h.pool.filterer.FilterMint(
-		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
-		nil,
-		nil,
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-	burnEventsIter, err := h.pool.filterer.FilterBurn(
-		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
-		nil,
-		nil,
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-	eventsRaw := make([]any, 0, 100)
-	for mintEventsIter.Next() {
-		eventsRaw = append(eventsRaw, *mintEventsIter.Event)
-	}
-	for burnEventsIter.Next() {
-		eventsRaw = append(eventsRaw, *burnEventsIter.Event)
-	}
-	if len(eventsRaw) == 0 {
-		slog.Warn(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
-		return make([]trade.UniswapV3Event, 0), nil
-	} else {
-		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
-	}
-
-	result, err := h.parseEvents(eventsRaw)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-
+// We identify liquidity interaction (mint/burn liquidity)
+// As unique combination of liquidity amount and corresponding amount of token0 and token1
+type LiquidityActionIdentity struct {
+	Amount  *big.Int
+	Amount0 *big.Int
+	Amount1 *big.Int
 }
 
-// events are of
+func NewLiquidityActionIdentity(liquidityAmount *big.Int, amount0 *big.Int, amount1 *big.Int) *LiquidityActionIdentity {
+	return &LiquidityActionIdentity{
+		Amount:  liquidityAmount,
+		Amount0: amount0,
+		Amount1: amount1,
+	}
+}
+
+var (
+	addressZero = common.BigToAddress(big.NewInt(0))
+)
+
+// pool events are of
 // UniswapV3PoolMint
-func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event, error) {
-	chunkSize := len(events) / h.ParallelFactor()
+// UniswapV3PoolBurn
+//
+// position manager liquidity events are of
+func (h *UniswapV3PoolHandler) parseEvents(poolEvents []any, pmLiquidityEvents []any, burnedPositionsInCurrentInterval []INonFungiblePositionsManagerTransfer, positions []trade.UniswapV3Position) ([]trade.UniswapV3Event, error) {
+	actualWalletsMintedLiquidity := make(map[*big.Int]common.Address)
+	actualWalletsBurnedLiquidity := make(map[*big.Int]common.Address)
+
+	liquidityAdded := make(map[*LiquidityActionIdentity]*big.Int)
+	liquidityRemoved := make(map[*LiquidityActionIdentity]*big.Int)
+
+	for _, position:= range positions {
+		tokenId, ok := new(big.Int).SetString(position.TokenId, 10)
+		if !ok {
+			return nil, fmt.Errorf("invalid token ID: %s", position.TokenId)
+
+		}
+		actualWalletsMintedLiquidity[tokenId] = common.HexToAddress(position.Owner)
+	}
+
+	for _, liquidityEvent := range pmLiquidityEvents {
+		switch casted := liquidityEvent.(type) {
+		case INonFungiblePositionsManagerIncreaseLiquidity:
+			liquidityAdded[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId
+		case INonFungiblePositionsManagerDecreaseLiquidity:
+			liquidityRemoved[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId
+		}
+	}
+
+	chunkSize := len(poolEvents) / h.ParallelFactor()
 	if chunkSize == 0 {
 		return []trade.UniswapV3Event{}, nil
 	}
-	chunks := lo.Chunk(events, chunkSize)
+	chunks := lo.Chunk(poolEvents, chunkSize)
 	chunksCount := len(chunks)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -291,6 +299,17 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 							cancel()
 							return
 						} else {
+							liquidityIdentity := NewLiquidityActionIdentity(castedEvent.Amount, castedEvent.Amount0, castedEvent.Amount1)
+							if tokenId, ok := liquidityAdded[liquidityIdentity]; ok {
+								if walletAddress, ok := actualWalletsMintedLiquidity[tokenId]; ok {
+									slog.Info(fmt.Sprintf(
+										"Wallet %s has minted token %s which corresponds to liquidity event being parsed",
+										walletAddress.Hex(),
+										tokenId.String(),
+									))
+									parsedEvent.WalletAddress = walletAddress.Hex()
+								}
+							}
 							resultCh <- *parsedEvent
 						}
 					case UniswapV3PoolBurn:
@@ -299,6 +318,17 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 							cancel()
 							return
 						} else {
+							liquidityIdentity := NewLiquidityActionIdentity(castedEvent.Amount, castedEvent.Amount0, castedEvent.Amount1)
+							if tokenId, ok := liquidityRemoved[liquidityIdentity]; ok {
+								if walletAddress, ok := actualWalletsBurnedLiquidity[tokenId]; ok {
+									slog.Info(fmt.Sprintf(
+										"Wallet %s has minted token %s which corresponds to liquidity event being parsed",
+										walletAddress.Hex(),
+										tokenId.String(),
+									))
+									parsedEvent.WalletAddress = walletAddress.Hex()
+								}
+							}
 							resultCh <- *parsedEvent
 						}
 					case UniswapV3PoolSwap:
@@ -318,7 +348,7 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 			}
 		}()
 	}
-	results := make([]trade.UniswapV3Event, len(events))
+	results := make([]trade.UniswapV3Event, len(poolEvents))
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -334,6 +364,141 @@ func (h *UniswapV3PoolHandler) parseEvents(events []any) ([]trade.UniswapV3Event
 	wg.Wait()
 	close(resultCh)
 	return results, nil
+}
+
+func (h *UniswapV3PoolHandler) fetchPoolLiquidityEvents(fromBlock uint64, toBlock uint64) ([]any, error) {
+	mintEventsIter, err := h.pool.filterer.FilterMint(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	burnEventsIter, err := h.pool.filterer.FilterBurn(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	liquidityPoolEvents := make([]any, 0, 100)
+	for mintEventsIter.Next() {
+		liquidityPoolEvents = append(liquidityPoolEvents, *mintEventsIter.Event)
+	}
+	for burnEventsIter.Next() {
+		liquidityPoolEvents = append(liquidityPoolEvents, *burnEventsIter.Event)
+	}
+	return liquidityPoolEvents, nil
+}
+
+func (h *UniswapV3PoolHandler) fetchPositionsManagerLiquidityEvents(fromBlock uint64, toBlock uint64) ([]any, error) {
+	// Parse INonFungiblePositionsManagerIncreaseLiquidity event
+	liquidityAddedIter, err := h.positionManager.filterer.FilterIncreaseLiquidity(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse INonFungiblePositionsManagerDecreaseLiquidity event
+	liquidityRemovedIter, err := h.positionManager.filterer.FilterDecreaseLiquidity(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	// Parse INonFungiblePositionsManagerIncreaseLiquidity event
+	liquidityPositionManagerEvents := make([]any, 0, 100)
+	for liquidityAddedIter.Next() {
+		liquidityPositionManagerEvents = append(liquidityPositionManagerEvents, *liquidityAddedIter.Event)
+	}
+	for liquidityRemovedIter.Next() {
+		liquidityPositionManagerEvents = append(liquidityPositionManagerEvents, *liquidityRemovedIter.Event)
+	}
+	return liquidityPositionManagerEvents, nil
+}
+
+func (h *UniswapV3PoolHandler) fetchERC721TransferEvents(fromBlock uint64, toBlock uint64) ([]INonFungiblePositionsManagerTransfer, error) {
+	erc721TransferEventsIter, err := h.positionManager.filterer.FilterTransfer(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	transferEvents := make([]INonFungiblePositionsManagerTransfer, 100)
+	for erc721TransferEventsIter.Next() {
+		transferEvents = append(transferEvents, *erc721TransferEventsIter.Event)
+	}
+	return transferEvents, nil
+}
+
+func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
+	chainId string,
+	fromBlock uint64,
+	toBlock uint64,
+) ([]trade.UniswapV3Event, []trade.UniswapV3Position, error) {
+	// Parse ERC721 Transfer events
+	transferEvents, err := h.fetchERC721TransferEvents(fromBlock, toBlock)
+	if err != nil {
+		return nil, nil, err
+	}
+	mintedPositions := make([]trade.UniswapV3Position, 0, len(transferEvents))
+	var alreadyMintedPositions []trade.UniswapV3Position
+	err = h.db.Find(alreadyMintedPositions, trade.UniswapV3Position{
+		ChainId: h.chainId,
+		UniswapPositionsManager: h.positionManager.Address.Hex(),
+	}).Error
+	if err != nil {
+		return nil, nil, err
+	}
+	allPositionsAvailableAtTheMoment := append(alreadyMintedPositions, mintedPositions...)
+	for i, event := range transferEvents {
+		if event.From == addressZero {
+			slog.Info(fmt.Sprintf(
+				"[%s] Found new position minted to %s with id %s",
+				h.Name(),
+				event.To.Hex(),
+				event.TokenId.String(),
+			))
+			mintedPositions[i] = trade.NewUniswapV3Position(
+				h.chainId,
+				h.positionManager.Address,
+				event.TokenId,
+				event.To,
+			)
+		}
+	}
+	liquidityPoolEvents, err := h.fetchPoolLiquidityEvents(fromBlock, toBlock)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(liquidityPoolEvents) == 0 {
+		slog.Warn(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
+		return make([]trade.UniswapV3Event, 0), mintedPositions, nil
+	} else {
+		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(liquidityPoolEvents), fromBlock, toBlock))
+	}
+
+	liquidityPositionManagerEvents, err := h.fetchPositionsManagerLiquidityEvents(fromBlock, toBlock)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result, err := h.parseEvents(liquidityPoolEvents, liquidityPositionManagerEvents, allPositionsAvailableAtTheMoment)
+	if err != nil {
+		return nil, nil, err
+	}
+	return result, nil, nil
+
 }
 
 func (h *UniswapV3PoolHandler) Name() string {
@@ -391,7 +556,7 @@ func (h *UniswapV3PoolHandler) FetchBlockchainInteractions(
 		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
 	}
 
-	result, err := h.parseEvents(eventsRaw)
+	result, err := h.parseEvents(eventsRaw, )
 	if err != nil {
 		return nil, err
 	}

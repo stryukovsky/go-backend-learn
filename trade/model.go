@@ -244,6 +244,23 @@ func NewUniswapV3Deal(
 	}
 }
 
+// Historical info on any position minted UniswapV3
+type UniswapV3Position struct {
+	ChainId                 string `json:"chainId" binding:"required" gorm:"uniqueIndex:uniswap_v3_position_uniqueness"`
+	UniswapPositionsManager string `json:"uniswapPositionsManager" binding:"required" gorm:"uniqueIndex:uniswap_v3_position_uniqueness"`
+	TokenId                 string `json:"tokenId" binding:"required" gorm:"uniqueIndex:uniswap_v3_position_uniqueness"`
+	Owner                   string `json:"owner" binding:"required"`
+}
+
+func NewUniswapV3Position(chainId string, uniswapPositionsManager common.Address, tokenId *big.Int, owner common.Address) UniswapV3Position {
+	return UniswapV3Position{
+		ChainId:                 chainId,
+		UniswapPositionsManager: uniswapPositionsManager.Hex(),
+		TokenId:                 tokenId.String(),
+		Owner:                   owner.Hex(),
+	}
+}
+
 type Deal struct {
 	gorm.Model
 	Price                DBNumeric `json:"price" binding:"required"`
@@ -324,9 +341,10 @@ const (
 
 type DeFiPlatform struct {
 	gorm.Model
-	ChainId string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
-	Address string `json:"address" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
-	Type    string `json:"type" binding:"required"`
+	ChainId               string `json:"chainId" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
+	Address               string `json:"address" binding:"required" gorm:"uniqueIndex:idx_platform_uniqueness"`
+	ExtraContractAddress1 string `json:"extraContractAddress1" binding:"required"`
+	Type                  string `json:"type" binding:"required"`
 }
 
 type TrackedWallet struct {
