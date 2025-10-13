@@ -1,8 +1,8 @@
 package cache
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -41,6 +41,7 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 		slog.Debug(fmt.Sprintf("[Cache] Block %s is new, fetching its date from blockchain", blockIdentifierStr))
 
 		blockHeader, err := client.HeaderByNumber(context.Background(), big.NewInt(int64(block)))
+		time.Sleep(time.Second * 1)
 		if err != nil {
 			return nil, err
 		}

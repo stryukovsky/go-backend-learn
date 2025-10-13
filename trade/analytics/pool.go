@@ -25,6 +25,7 @@ func fetchInteractionsFromEthJSONRPC(
 	endBlock uint64,
 	handler *uniswapv3.UniswapV3PoolHandler,
 ) error {
+	var blockchainInteractions []trade.UniswapV3Event
 	blockchainInteractions, mintedPositions, err := handler.FetchLiquidityInteractions(
 		chainId,
 		startBlock,
@@ -38,7 +39,13 @@ func fetchInteractionsFromEthJSONRPC(
 		err = db.Save(mintedPositions).Error
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[%s] Cannot save minted uniswapv3 positions: %s", handler.Name(), err.Error()))
-			return err
+			slog.Info(fmt.Sprintf("[%s] Retry using single-insert mode", handler.Name()))
+			for _, mintedPosition := range mintedPositions {
+				err = db.Save(&mintedPosition).Error
+				if err != nil {
+					slog.Warn(fmt.Sprintf("Error saving minted position: %s", err.Error()))
+				}
+			}
 		}
 	}
 	if len(blockchainInteractions) == 0 {
@@ -48,7 +55,21 @@ func fetchInteractionsFromEthJSONRPC(
 	err = db.Save(blockchainInteractions).Error
 	if err != nil {
 		slog.Warn(fmt.Sprintf("[%s] Cannot save blockchain interactions: %s", handler.Name(), err.Error()))
-		return err
+		slog.Info(fmt.Sprintf("[%s] Retry using single-insert mode", handler.Name()))
+		nonDuplicatedBlockchainInteractions := make([]trade.UniswapV3Event, 0, len(blockchainInteractions))
+		for _, blockchainInteraction := range blockchainInteractions {
+			err = db.Create(&blockchainInteraction).Error
+			if err != nil {
+				slog.Warn(fmt.Sprintf("Failed to insert blockchain interaction: %s", err.Error()))
+			} else {
+				nonDuplicatedBlockchainInteractions = append(nonDuplicatedBlockchainInteractions, blockchainInteraction)
+			}
+		}
+		blockchainInteractions = nonDuplicatedBlockchainInteractions
+	}
+	if len(blockchainInteractions) == 0 {
+		slog.Warn(fmt.Sprintf("[%s] No blockchain interactions saved to database", handler.Name()))
+		return nil
 	}
 	slog.Info(fmt.Sprintf(
 		"[%s] Found %d blockchain interactions where tracked wallets participated",
@@ -62,7 +83,16 @@ func fetchInteractionsFromEthJSONRPC(
 	err = db.Save(financialInteractions).Error
 	if err != nil {
 		slog.Warn(fmt.Sprintf("[%s] Cannot save financial interactions: %s", handler.Name(), err.Error()))
-		return err
+		slog.Info(fmt.Sprintf("[%s] Retry using single-insert mode", handler.Name()))
+		nonDuplicatedFinancialInteractions := make([]trade.UniswapV3Deal, 0, len(financialInteractions))
+		for _, financialInteraction := range financialInteractions {
+			err = db.Create(&financialInteraction).Error
+			if err != nil {
+				slog.Warn(fmt.Sprintf("Failed to insert financial interaction: %s", err.Error()))
+			} else {
+				nonDuplicatedFinancialInteractions = append(nonDuplicatedFinancialInteractions, financialInteraction)
+			}
+		}
 	}
 
 	return nil

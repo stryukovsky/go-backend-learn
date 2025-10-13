@@ -348,29 +348,25 @@ func (h *UniswapV3PoolHandler) parseEvents(
 						continue
 					}
 				}
-				slog.Debug(fmt.Sprintf("[%s] %d worker finished parsing events", h.Name(), i))
 			}
+			slog.Debug(fmt.Sprintf("[%s] %d worker finished parsing events", h.Name(), i))
 		}()
 	}
-	results := make([]trade.UniswapV3Event, len(poolEvents))
+	results := make([]trade.UniswapV3Event, 0, len(poolEvents))
 	go func() {
 		wg.Wait()
 		close(resultCh)
 	}()
-	i := 0
-	for {
+	for item := range resultCh {
 		select {
 		case <-ctx.Done():
 			return []trade.UniswapV3Event{}, errors.New("Some worker goroutine encountered error. Details in logs")
-		case item, ok := <-resultCh:
-			if ok {
-				results[i] = item
-				i++
-			} else {return  results, nil}
 		default:
-			return results, nil
+			results = append(results, item)
 		}
 	}
+	return results, nil
+
 }
 
 func (h *UniswapV3PoolHandler) fetchPoolLiquidityEvents(fromBlock uint64, toBlock uint64) ([]any, error) {
