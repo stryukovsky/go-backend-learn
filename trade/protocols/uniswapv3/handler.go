@@ -224,16 +224,16 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 // We identify liquidity interaction (mint/burn liquidity)
 // As unique combination of liquidity amount and corresponding amount of token0 and token1
 type LiquidityActionIdentity struct {
-	Amount  *big.Int
-	Amount0 *big.Int
-	Amount1 *big.Int
+	Amount  string
+	Amount0 string
+	Amount1 string
 }
 
-func NewLiquidityActionIdentity(liquidityAmount *big.Int, amount0 *big.Int, amount1 *big.Int) *LiquidityActionIdentity {
-	return &LiquidityActionIdentity{
-		Amount:  liquidityAmount,
-		Amount0: amount0,
-		Amount1: amount1,
+func NewLiquidityActionIdentity(liquidityAmount *big.Int, amount0 *big.Int, amount1 *big.Int) LiquidityActionIdentity {
+	return LiquidityActionIdentity{
+		Amount: liquidityAmount.String(),
+		Amount0: amount0.String(),
+		Amount1: amount1.String(),
 	}
 }
 
@@ -249,29 +249,24 @@ var (
 func (h *UniswapV3PoolHandler) parseEvents(
 	poolEvents []any,
 	pmLiquidityEvents []any,
-	actualWalletsBurnedLiquidity map[*big.Int]common.Address,
+	actualWalletsBurnedLiquidity map[string]common.Address,
 	positions []trade.UniswapV3Position,
 ) ([]trade.UniswapV3Event, error) {
-	actualWalletsMintedLiquidity := make(map[*big.Int]common.Address)
+	actualWalletsMintedLiquidity := make(map[string]common.Address)
 
-	liquidityAdded := make(map[*LiquidityActionIdentity]*big.Int)
-	liquidityRemoved := make(map[*LiquidityActionIdentity]*big.Int)
+	liquidityAdded := make(map[LiquidityActionIdentity]string)
+	liquidityRemoved := make(map[LiquidityActionIdentity]string)
 
 	for _, position := range positions {
-		tokenId, ok := new(big.Int).SetString(position.TokenId, 10)
-		if !ok {
-			return nil, fmt.Errorf("invalid token ID: %s", position.TokenId)
-
-		}
-		actualWalletsMintedLiquidity[tokenId] = common.HexToAddress(position.Owner)
+		actualWalletsMintedLiquidity[position.TokenId] = common.HexToAddress(position.Owner)
 	}
 
 	for _, liquidityEvent := range pmLiquidityEvents {
 		switch casted := liquidityEvent.(type) {
 		case INonFungiblePositionsManagerIncreaseLiquidity:
-			liquidityAdded[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId
+			liquidityAdded[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId.String()
 		case INonFungiblePositionsManagerDecreaseLiquidity:
-			liquidityRemoved[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId
+			liquidityRemoved[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId.String()
 		}
 	}
 
@@ -307,12 +302,17 @@ func (h *UniswapV3PoolHandler) parseEvents(
 							if tokenId, ok := liquidityAdded[liquidityIdentity]; ok {
 								if walletAddress, ok := actualWalletsMintedLiquidity[tokenId]; ok {
 									slog.Info(fmt.Sprintf(
-										"Wallet %s has minted token %s which corresponds to liquidity event being parsed",
+										"[%s] Wallet %s has minted token %s which corresponds to liquidity event being parsed",
+										h.Name(),
 										walletAddress.Hex(),
-										tokenId.String(),
+										tokenId,
 									))
 									parsedEvent.WalletAddress = walletAddress.Hex()
+								} else {
+									slog.Warn(fmt.Sprintf("[%s] Token with tokenId %s found, but no wallet holding it found", h.Name(), tokenId))
 								}
+							} else {
+								slog.Warn(fmt.Sprintf("[%s] liquidity minted, but no token ID found", h.Name()))
 							}
 							resultCh <- *parsedEvent
 						}
@@ -328,7 +328,7 @@ func (h *UniswapV3PoolHandler) parseEvents(
 									slog.Info(fmt.Sprintf(
 										"Wallet %s has burned token %s which corresponds to liquidity event being parsed",
 										walletAddress.Hex(),
-										tokenId.String(),
+										tokenId,
 									))
 									parsedEvent.WalletAddress = walletAddress.Hex()
 								}
@@ -466,7 +466,7 @@ func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
 		return nil, nil, err
 	}
 	mintedPositions := make([]trade.UniswapV3Position, 0, len(transferEvents))
-	positionBurnedEvents := make(map[*big.Int]common.Address)
+	positionBurnedEvents := make(map[string]common.Address)
 	var alreadyMintedPositions []trade.UniswapV3Position
 	err = h.db.Find(&alreadyMintedPositions, trade.UniswapV3Position{
 		ChainId:                 h.chainId,
@@ -491,7 +491,7 @@ func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
 			))
 		}
 		if event.To == addressZero {
-			positionBurnedEvents[event.TokenId] = event.From
+			positionBurnedEvents[event.TokenId.String()] = event.From
 		}
 	}
 	allPositionsAvailableAtTheMoment := append(alreadyMintedPositions, mintedPositions...)
