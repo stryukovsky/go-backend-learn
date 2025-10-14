@@ -41,7 +41,7 @@ func fetchInteractionsFromEthJSONRPC(
 			slog.Warn(fmt.Sprintf("[%s] Cannot save minted uniswapv3 positions: %s", handler.Name(), err.Error()))
 			slog.Info(fmt.Sprintf("[%s] Retry using single-insert mode", handler.Name()))
 			for _, mintedPosition := range mintedPositions {
-				err = db.Save(&mintedPosition).Error
+				err = db.Create(&mintedPosition).Error
 				if err != nil {
 					slog.Warn(fmt.Sprintf("Error saving minted position: %s", err.Error()))
 				}
