@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/redis/go-redis/v9"
+	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/uniswapv3"
@@ -17,6 +18,30 @@ import (
 const (
 	ParallelFactor = 16
 )
+
+func progressiveSave[T any, S []T](db *gorm.DB, items S) S {
+	chunkSize := 100
+	chunks := lo.Chunk(items, chunkSize)
+	saved := make(S, 0, len(items))
+	if len(chunks) == 0 {
+		return make(S, 0)
+	}
+	for _, chunk := range chunks {
+		err := db.Save(chunk).Error
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Cannot save batch due to %s. Retry in single-insert", err.Error()))
+			for _, item := range chunk {
+				err := db.Create(&item).Error
+				if err == nil {
+					saved = append(saved, item)
+				}
+			}
+		} else {
+			saved = append(saved, chunk...)
+		}
+	}
+	return saved
+}
 
 func fetchInteractionsFromEthJSONRPC(
 	chainId string,
@@ -36,37 +61,13 @@ func fetchInteractionsFromEthJSONRPC(
 		return err
 	}
 	if len(mintedPositions) > 0 {
-		err = db.Save(mintedPositions).Error
-		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot save minted uniswapv3 positions: %s", handler.Name(), err.Error()))
-			slog.Info(fmt.Sprintf("[%s] Retry using single-insert mode", handler.Name()))
-			for _, mintedPosition := range mintedPositions {
-				err = db.Create(&mintedPosition).Error
-				if err != nil {
-					slog.Warn(fmt.Sprintf("Error saving minted position: %s", err.Error()))
-				}
-			}
-		}
+		progressiveSave(db, mintedPositions)
 	}
 	if len(blockchainInteractions) == 0 {
 		slog.Warn(fmt.Sprintf("[%s] No blockchain interactions", handler.Name()))
 		return nil
 	}
-	err = db.Save(blockchainInteractions).Error
-	if err != nil {
-		slog.Warn(fmt.Sprintf("[%s] Cannot save blockchain interactions: %s", handler.Name(), err.Error()))
-		slog.Info(fmt.Sprintf("[%s] Retry using single-insert mode", handler.Name()))
-		nonDuplicatedBlockchainInteractions := make([]trade.UniswapV3Event, 0, len(blockchainInteractions))
-		for _, blockchainInteraction := range blockchainInteractions {
-			err = db.Create(&blockchainInteraction).Error
-			if err != nil {
-				slog.Warn(fmt.Sprintf("Failed to insert blockchain interaction: %s", err.Error()))
-			} else {
-				nonDuplicatedBlockchainInteractions = append(nonDuplicatedBlockchainInteractions, blockchainInteraction)
-			}
-		}
-		blockchainInteractions = nonDuplicatedBlockchainInteractions
-	}
+	blockchainInteractions = progressiveSave(db, blockchainInteractions)
 	if len(blockchainInteractions) == 0 {
 		slog.Warn(fmt.Sprintf("[%s] No blockchain interactions saved to database", handler.Name()))
 		return nil
@@ -80,21 +81,7 @@ func fetchInteractionsFromEthJSONRPC(
 		slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
 		return err
 	}
-	err = db.Save(financialInteractions).Error
-	if err != nil {
-		slog.Warn(fmt.Sprintf("[%s] Cannot save financial interactions: %s", handler.Name(), err.Error()))
-		slog.Info(fmt.Sprintf("[%s] Retry using single-insert mode", handler.Name()))
-		nonDuplicatedFinancialInteractions := make([]trade.UniswapV3Deal, 0, len(financialInteractions))
-		for _, financialInteraction := range financialInteractions {
-			err = db.Create(&financialInteraction).Error
-			if err != nil {
-				slog.Warn(fmt.Sprintf("Failed to insert financial interaction: %s", err.Error()))
-			} else {
-				nonDuplicatedFinancialInteractions = append(nonDuplicatedFinancialInteractions, financialInteraction)
-			}
-		}
-	}
-
+	progressiveSave(db, financialInteractions)
 	return nil
 }
 
