@@ -515,7 +515,7 @@ func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
 	if err != nil {
 		return nil, nil, err
 	}
-	return result, nil, nil
+	return result, mintedPositions, nil
 }
 
 func (h *UniswapV3PoolHandler) Name() string {
