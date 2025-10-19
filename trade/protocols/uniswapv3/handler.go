@@ -106,7 +106,6 @@ func SqrtPrice2Price(source *big.Int, token0 trade.Token, token1 trade.Token) (*
 }
 
 func (h *UniswapV3PoolHandler) parseMint(event UniswapV3PoolMint) (*trade.UniswapV3Event, error) {
-
 	lowerPrice, err := Tick2Price(event.TickLower, h.tokenA, h.tokenB)
 	if err != nil {
 		slog.Warn(fmt.Sprintf("[%s] Cannot parse lower price of mint event: %s", h.Name(), err.Error()))
@@ -136,8 +135,8 @@ func (h *UniswapV3PoolHandler) parseMint(event UniswapV3PoolMint) (*trade.Uniswa
 		h.pool.Address.Hex(),
 		event.Amount0,
 		event.Amount1,
-		upperPrice,
 		lowerPrice,
+		upperPrice,
 		*timestamp,
 		event.Raw.TxHash.Hex(),
 		event.Raw.Index,
@@ -176,8 +175,8 @@ func (h *UniswapV3PoolHandler) parseBurn(event UniswapV3PoolBurn) (*trade.Uniswa
 		h.pool.Address.Hex(),
 		event.Amount0,
 		event.Amount1,
-		upperPrice,
 		lowerPrice,
+		upperPrice,
 		*timestamp,
 		event.Raw.TxHash.Hex(),
 		event.Raw.Index,
@@ -221,6 +220,46 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 	return &result, nil
 }
 
+func (h *UniswapV3PoolHandler) parseCollect(event UniswapV3PoolCollect) (*trade.UniswapV3Event, error) {
+	lowerPrice, err := Tick2Price(event.TickLower, h.tokenA, h.tokenB)
+	if err != nil {
+		slog.Warn(fmt.Sprintf("[%s] Cannot parse lower price of burn event: %s", h.Name(), err.Error()))
+		return nil, err
+	}
+	upperPrice, err := Tick2Price(event.TickUpper, h.tokenA, h.tokenB)
+	if err != nil {
+		slog.Warn(fmt.Sprintf("[%s] Cannot parse upper price of burn event: %s", h.Name(), err.Error()))
+		return nil, err
+	}
+	timestamp, err := cache.GetCachedBlockTimestamp(
+		h.pool.client,
+		h.rdb,
+		event.Raw.BlockNumber,
+	)
+	if err != nil {
+		slog.Warn(fmt.Sprintf("[%s] Cannot get block timestamp from cache/blockchain: %s", h.Name(), err.Error()))
+		return nil, err
+	}
+	if timestamp.IsZero() {
+		slog.Warn(fmt.Sprintf("[%s] Block timestamp is zero", h.Name()))
+	}
+	result := trade.NewUniswapV3Event(
+		h.chainId,
+		trade.UniswapV3Collect,
+		event.Owner.Hex(),
+		h.pool.Address.Hex(),
+		event.Amount0,
+		event.Amount1,
+		lowerPrice,
+		upperPrice,
+		*timestamp,
+		event.Raw.TxHash.Hex(),
+		event.Raw.Index,
+		event.Raw.BlockNumber,
+	)
+	return &result, nil
+}
+
 // We identify liquidity interaction (mint/burn liquidity)
 // As unique combination of liquidity amount and corresponding amount of token0 and token1
 type LiquidityActionIdentity struct {
@@ -231,15 +270,13 @@ type LiquidityActionIdentity struct {
 
 func NewLiquidityActionIdentity(liquidityAmount *big.Int, amount0 *big.Int, amount1 *big.Int) LiquidityActionIdentity {
 	return LiquidityActionIdentity{
-		Amount: liquidityAmount.String(),
+		Amount:  liquidityAmount.String(),
 		Amount0: amount0.String(),
 		Amount1: amount1.String(),
 	}
 }
 
-var (
-	addressZero = common.BigToAddress(big.NewInt(0))
-)
+var addressZero = common.BigToAddress(big.NewInt(0))
 
 // pool events are of
 // UniswapV3PoolMint
@@ -343,6 +380,8 @@ func (h *UniswapV3PoolHandler) parseEvents(
 						} else {
 							resultCh <- *parsedEvent
 						}
+					case UniswapV3PoolCollect:
+						parsedEvent, err := h.parseCollect(castedEvent)
 					default:
 						slog.Info(fmt.Sprintf("[%s] Skip event of type %s since no parsing implemented for it", h.Name(), uncastedEvent))
 						continue
@@ -366,7 +405,6 @@ func (h *UniswapV3PoolHandler) parseEvents(
 		}
 	}
 	return results, nil
-
 }
 
 func (h *UniswapV3PoolHandler) fetchPoolLiquidityEvents(fromBlock uint64, toBlock uint64) ([]any, error) {
@@ -427,6 +465,12 @@ func (h *UniswapV3PoolHandler) fetchPositionsManagerLiquidityEvents(fromBlock ui
 	if err != nil {
 		return nil, err
 	}
+
+	feesCollected, err := h.positionManager.filterer.FilterCollect(&bind.FilterOpts{Start: fromBlock, End: &toBlock}, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	// Parse INonFungiblePositionsManagerIncreaseLiquidity event
 	liquidityPositionManagerEvents := make([]any, 0, 100)
 	for liquidityAddedIter.Next() {
@@ -434,6 +478,9 @@ func (h *UniswapV3PoolHandler) fetchPositionsManagerLiquidityEvents(fromBlock ui
 	}
 	for liquidityRemovedIter.Next() {
 		liquidityPositionManagerEvents = append(liquidityPositionManagerEvents, *liquidityRemovedIter.Event)
+	}
+	for feesCollected.Next() {
+		liquidityPositionManagerEvents = append(liquidityPositionManagerEvents, *feesCollected.Event)
 	}
 	return liquidityPositionManagerEvents, nil
 }
@@ -534,7 +581,6 @@ func (h *UniswapV3PoolHandler) FetchBlockchainInteractions(
 	}
 	// FIXME: filter and also return created positions
 	return events, nil
-
 }
 
 func (h *UniswapV3PoolHandler) humanVolumeOfToken(amount *big.Int, token *trade.Token, dealTime *time.Time) (*big.Rat, *big.Rat, *big.Rat, error) {

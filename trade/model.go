@@ -154,6 +154,8 @@ const (
 	UniswapV3Swap = "Swap"
 	UniswapV3Mint = "Mint"
 	UniswapV3Burn = "Burn"
+	UniswapV3Collect = "Collect"
+
 )
 
 type UniswapV3Event struct {
