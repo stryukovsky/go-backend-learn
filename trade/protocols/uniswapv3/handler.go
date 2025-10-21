@@ -281,6 +281,8 @@ var addressZero = common.BigToAddress(big.NewInt(0))
 // pool events are of
 // UniswapV3PoolMint
 // UniswapV3PoolBurn
+// UniswapV3PoolCollect
+// UniswapV3PoolSwap
 //
 // position manager liquidity events are of
 func (h *UniswapV3PoolHandler) parseEvents(
@@ -345,6 +347,7 @@ func (h *UniswapV3PoolHandler) parseEvents(
 										tokenId,
 									))
 									parsedEvent.WalletAddress = walletAddress.Hex()
+									parsedEvent.PositionTokenId = tokenId
 								} else {
 									slog.Warn(fmt.Sprintf("[%s] Token with tokenId %s found, but no wallet holding it found", h.Name(), tokenId))
 								}
@@ -368,6 +371,7 @@ func (h *UniswapV3PoolHandler) parseEvents(
 										tokenId,
 									))
 									parsedEvent.WalletAddress = walletAddress.Hex()
+									parsedEvent.PositionTokenId = tokenId
 								}
 							}
 							resultCh <- *parsedEvent
@@ -382,6 +386,12 @@ func (h *UniswapV3PoolHandler) parseEvents(
 						}
 					case UniswapV3PoolCollect:
 						parsedEvent, err := h.parseCollect(castedEvent)
+						if err != nil {
+							cancel()
+							return
+						} else {
+							resultCh <- *parsedEvent
+						}
 					default:
 						slog.Info(fmt.Sprintf("[%s] Skip event of type %s since no parsing implemented for it", h.Name(), uncastedEvent))
 						continue

@@ -151,11 +151,10 @@ func NewAaveEvent(
 }
 
 const (
-	UniswapV3Swap = "Swap"
-	UniswapV3Mint = "Mint"
-	UniswapV3Burn = "Burn"
+	UniswapV3Swap    = "Swap"
+	UniswapV3Mint    = "Mint"
+	UniswapV3Burn    = "Burn"
 	UniswapV3Collect = "Collect"
-
 )
 
 type UniswapV3Event struct {
@@ -167,12 +166,13 @@ type UniswapV3Event struct {
 	AmountTokenA  DBInt  `json:"amountTokenA" binding:"required"`
 	AmountTokenB  DBInt  `json:"amountTokenB" binding:"required"`
 	// for swaps PriceLower == PriceUpper
-	PriceLower  DBNumeric `json:"priceLower" binding:"required"`
-	PriceUpper  DBNumeric `json:"priceUpper" binding:"required"`
-	Timestamp   time.Time `json:"timestamp" binding:"required"`
-	TxId        string    `json:"txId" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
-	LogIndex    uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
-	BlockNumber uint64    `json:"blockNumber" binding:"required"`
+	PriceLower      DBNumeric `json:"priceLower" binding:"required"`
+	PriceUpper      DBNumeric `json:"priceUpper" binding:"required"`
+	Timestamp       time.Time `json:"timestamp" binding:"required"`
+	PositionTokenId string    `json:"tokenId" binding:"required"`
+	TxId            string    `json:"txId" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
+	LogIndex        uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:uniswap_v3_idx_event_uniqueness"`
+	BlockNumber     uint64    `json:"blockNumber" binding:"required"`
 }
 
 func NewUniswapV3Event(
@@ -190,18 +190,19 @@ func NewUniswapV3Event(
 	blockNumber uint64,
 ) UniswapV3Event {
 	return UniswapV3Event{
-		ChainId:       chainId,
-		Type:          eventType,
-		WalletAddress: walletAddress,
-		PoolAddress:   poolAddress,
-		AmountTokenA:  NewDBInt(amountTokenA),
-		AmountTokenB:  NewDBInt(amountTokenB),
-		PriceLower:    NewDBNumeric(priceLower),
-		PriceUpper:    NewDBNumeric(priceUpper),
-		Timestamp:     timestamp,
-		TxId:          txId,
-		LogIndex:      logIndex,
-		BlockNumber:   blockNumber,
+		ChainId:         chainId,
+		Type:            eventType,
+		WalletAddress:   walletAddress,
+		PoolAddress:     poolAddress,
+		AmountTokenA:    NewDBInt(amountTokenA),
+		AmountTokenB:    NewDBInt(amountTokenB),
+		PriceLower:      NewDBNumeric(priceLower),
+		PriceUpper:      NewDBNumeric(priceUpper),
+		Timestamp:       timestamp,
+		PositionTokenId: "",
+		TxId:            txId,
+		LogIndex:        logIndex,
+		BlockNumber:     blockNumber,
 	}
 }
 
