@@ -292,20 +292,21 @@ func (h *UniswapV3PoolHandler) parseEvents(
 	positions []trade.UniswapV3Position,
 ) ([]trade.UniswapV3Event, error) {
 	actualWalletsMintedLiquidity := make(map[string]common.Address)
-
-	liquidityAdded := make(map[LiquidityActionIdentity]string)
-	liquidityRemoved := make(map[LiquidityActionIdentity]string)
-
 	for _, position := range positions {
 		actualWalletsMintedLiquidity[position.TokenId] = common.HexToAddress(position.Owner)
 	}
 
+	liquidityAdded := make(map[LiquidityActionIdentity]string)
+	liquidityRemoved := make(map[LiquidityActionIdentity]string)
+	feesCollected := make(map[LiquidityActionIdentity]string)
 	for _, liquidityEvent := range pmLiquidityEvents {
 		switch casted := liquidityEvent.(type) {
 		case INonFungiblePositionsManagerIncreaseLiquidity:
 			liquidityAdded[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId.String()
 		case INonFungiblePositionsManagerDecreaseLiquidity:
 			liquidityRemoved[NewLiquidityActionIdentity(casted.Liquidity, casted.Amount0, casted.Amount1)] = casted.TokenId.String()
+		case INonFungiblePositionsManagerCollect:
+			feesCollected[NewLiquidityActionIdentity(big.NewInt(0), casted.Amount0, casted.Amount1)] = casted.TokenId.String()
 		}
 	}
 
@@ -390,6 +391,18 @@ func (h *UniswapV3PoolHandler) parseEvents(
 							cancel()
 							return
 						} else {
+							liquidityIdentity := NewLiquidityActionIdentity(big.NewInt(0), castedEvent.Amount0, castedEvent.Amount1)
+							if tokenId, ok := feesCollected[liquidityIdentity]; ok {
+								if walletAddress, ok := actualWalletsBurnedLiquidity[tokenId]; ok {
+									slog.Info(fmt.Sprintf(
+										"Wallet %s has collected fees on liquidity token %s which corresponds to liquidity event being parsed",
+										walletAddress.Hex(),
+										tokenId,
+									))
+									parsedEvent.WalletAddress = walletAddress.Hex()
+									parsedEvent.PositionTokenId = tokenId
+								}
+							}
 							resultCh <- *parsedEvent
 						}
 					default:
