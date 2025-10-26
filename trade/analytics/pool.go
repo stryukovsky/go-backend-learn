@@ -10,7 +10,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
-	"github.com/stryukovsky/go-backend-learn/trade/protocols"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/uniswapv3"
 	"gorm.io/gorm"
 )
@@ -85,7 +84,7 @@ func fetchInteractionsFromEthJSONRPC(
 	return nil
 }
 
-func Analyze(blocksCount uint64, poolAddress string, db *gorm.DB, rdb *redis.Client) {
+func Analyze(blocksCount uint64, db *gorm.DB, rdb *redis.Client) {
 	slog.Info("Starting worker")
 	var config trade.AnalyticsWorker
 	result := db.First(&config)
@@ -108,31 +107,33 @@ func Analyze(blocksCount uint64, poolAddress string, db *gorm.DB, rdb *redis.Cli
 		return
 	}
 
-	var uniswapV3Pool trade.DeFiPlatform
-	err = db.Find(&uniswapV3Pool, &trade.DeFiPlatform{
+	var uniswapV3Pools []trade.DeFiPlatform
+	err = db.Find(&uniswapV3Pools, &trade.DeFiPlatform{
 		ChainId: chainId.String(),
 		Type:    trade.UniswapV3,
-		Address: poolAddress,
 	}).Error
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot get UniswapV3 pool: %s", err.Error()))
 		return
 	}
-	var uniswapv3Handlers []protocols.DeFiProtocolHandler[trade.UniswapV3Event, trade.UniswapV3Deal]
-	uniswapv3Handler, err := uniswapv3.NewUniswapV3PoolHandler(
-		uniswapV3Pool,
-		client,
-		rdb,
-		db,
-		ParallelFactor,
-	)
-	if err != nil {
-		slog.Warn(fmt.Sprintf("Cannot get uniswapv3 platform handler: %s", err.Error()))
-		return
+	// var uniswapv3Handlers []protocols.DeFiProtocolHandler[trade.UniswapV3Event, trade.UniswapV3Deal]
+	uniswapv3Handlers := make([]*uniswapv3.UniswapV3PoolHandler, 0, len(uniswapV3Pools))
+	for _, uv3pool := range uniswapV3Pools {
+		uniswapv3Handler, err := uniswapv3.NewUniswapV3PoolHandler(
+			uv3pool,
+			client,
+			rdb,
+			db,
+			ParallelFactor,
+		)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Cannot get uniswapv3 platform handler: %s", err.Error()))
+			return
+		}
+		// var casted protocols.DeFiProtocolHandler[trade.UniswapV3Event, trade.UniswapV3Deal]
+		// casted = uniswapv3Handler
+		uniswapv3Handlers = append(uniswapv3Handlers, uniswapv3Handler)
 	}
-	var casted protocols.DeFiProtocolHandler[trade.UniswapV3Event, trade.UniswapV3Deal]
-	casted = uniswapv3Handler
-	uniswapv3Handlers = append(uniswapv3Handlers, casted)
 
 	for {
 		lastBlockInBlockchain, err := client.BlockNumber(context.Background())
@@ -153,13 +154,15 @@ func Analyze(blocksCount uint64, poolAddress string, db *gorm.DB, rdb *redis.Cli
 			continue
 		}
 		dbTx := db
-		err = fetchInteractionsFromEthJSONRPC(
-			chainId.String(),
-			dbTx,
-			currentBlock,
-			endBlock,
-			uniswapv3Handler,
-		)
+		for _, uv3Handler := range uniswapv3Handlers {
+			err = fetchInteractionsFromEthJSONRPC(
+				chainId.String(),
+				dbTx,
+				currentBlock,
+				endBlock,
+				uv3Handler,
+			)
+		}
 		if err != nil {
 			slog.Info(fmt.Sprintf("Cannot fetch UniswapV3 interactions due to %s", err.Error()))
 			return
