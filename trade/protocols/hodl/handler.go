@@ -10,7 +10,6 @@ import (
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
@@ -18,18 +17,18 @@ import (
 
 type HODLHandler struct {
 	token          ERC20
-	rdb            *redis.Client
+	cm            *cache.CacheManager
 	parallelFactor int
 }
 
-func NewHODLHandler(client *ethclient.Client, token trade.Token, rdb *redis.Client, parallelFactor int) (*HODLHandler, error) {
+func NewHODLHandler(client *ethclient.Client, token trade.Token, cm *cache.CacheManager, parallelFactor int) (*HODLHandler, error) {
 	erc20, err := NewERC20(client, token)
 	if err != nil {
 		return nil, err
 	}
 	return &HODLHandler{
 		token:          *erc20,
-		rdb:            rdb,
+		cm:            cm,
 		parallelFactor: parallelFactor,
 	}, nil
 }
@@ -98,7 +97,7 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 					amount := common.BytesToHash(event.Data).Big()
 					txId := event.TxHash.Hex()
 					block := big.NewInt(int64(event.BlockNumber))
-					timestamp, err := cache.GetCachedBlockTimestamp(h.token.client, h.rdb, event.BlockNumber)
+					timestamp, err := h.cm.GetCachedBlockTimestamp(event.BlockNumber)
 					if err != nil {
 						slog.Warn(fmt.Sprintf("Cannot fetch from cache or blockchain info on block %d timestamp: %s", event.BlockNumber, err.Error()))
 						continue
@@ -126,7 +125,7 @@ func (h *HODLHandler) ParallelFactor() int { return h.parallelFactor }
 func (h *HODLHandler) PopulateWithFinanceInfo(interactions []trade.ERC20Transfer) ([]trade.Deal, error) {
 	result := make([]trade.Deal, len(interactions))
 	for i, transfer := range interactions {
-		closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, h.token.Info.Symbol, &transfer.Timestamp)
+		closePrice, err := h.cm.GetCachedSymbolPriceAtTime(h.token.Info.Symbol, &transfer.Timestamp)
 		if err != nil {
 			return nil, err
 		}

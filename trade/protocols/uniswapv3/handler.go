@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
@@ -23,7 +22,7 @@ import (
 type UniswapV3PoolHandler struct {
 	pool            UniswapV3PoolInstance
 	positionManager NFPositionManagerInstance
-	rdb             *redis.Client
+	cm             *cache.CacheManager
 	db              *gorm.DB
 	name            string
 	tokenA          trade.Token
@@ -37,7 +36,7 @@ func (h *UniswapV3PoolHandler) ParallelFactor() int { return h.parallelFactor }
 func NewUniswapV3PoolHandler(
 	instance trade.DeFiPlatform,
 	client *ethclient.Client,
-	rdb *redis.Client,
+	cm *cache.CacheManager,
 	db *gorm.DB,
 	parallelFactor int,
 ) (*UniswapV3PoolHandler, error) {
@@ -65,7 +64,7 @@ func NewUniswapV3PoolHandler(
 	return &UniswapV3PoolHandler{
 		pool:            *pool,
 		positionManager: *nfPositionManager,
-		rdb:             rdb,
+		cm:             cm,
 		db:              db,
 		name:            fmt.Sprintf("Uniswap V3 Pool %s - %s", tokenA.Symbol, tokenB.Symbol),
 		tokenA:          tokenA,
@@ -116,9 +115,7 @@ func (h *UniswapV3PoolHandler) parseMint(event UniswapV3PoolMint) (*trade.Uniswa
 		slog.Warn(fmt.Sprintf("[%s] Cannot parse upper price of mint event: %s", h.Name(), err.Error()))
 		return nil, err
 	}
-	timestamp, err := cache.GetCachedBlockTimestamp(
-		h.pool.client,
-		h.rdb,
+	timestamp, err := h.cm.GetCachedBlockTimestamp(
 		event.Raw.BlockNumber,
 	)
 	if err != nil {
@@ -156,9 +153,7 @@ func (h *UniswapV3PoolHandler) parseBurn(event UniswapV3PoolBurn) (*trade.Uniswa
 		slog.Warn(fmt.Sprintf("[%s] Cannot parse upper price of burn event: %s", h.Name(), err.Error()))
 		return nil, err
 	}
-	timestamp, err := cache.GetCachedBlockTimestamp(
-		h.pool.client,
-		h.rdb,
+	timestamp, err := h.cm.GetCachedBlockTimestamp(
 		event.Raw.BlockNumber,
 	)
 	if err != nil {
@@ -191,9 +186,7 @@ func (h *UniswapV3PoolHandler) parseSwap(event UniswapV3PoolSwap) (*trade.Uniswa
 		slog.Warn(fmt.Sprintf("[%s] Cannot parse price of swap event: %s", h.Name(), err.Error()))
 		return nil, err
 	}
-	timestamp, err := cache.GetCachedBlockTimestamp(
-		h.pool.client,
-		h.rdb,
+	timestamp, err := h.cm.GetCachedBlockTimestamp(
 		event.Raw.BlockNumber,
 	)
 	if err != nil {
@@ -231,9 +224,7 @@ func (h *UniswapV3PoolHandler) parseCollect(event UniswapV3PoolCollect) (*trade.
 		slog.Warn(fmt.Sprintf("[%s] Cannot parse upper price of burn event: %s", h.Name(), err.Error()))
 		return nil, err
 	}
-	timestamp, err := cache.GetCachedBlockTimestamp(
-		h.pool.client,
-		h.rdb,
+	timestamp, err := h.cm.GetCachedBlockTimestamp(
 		event.Raw.BlockNumber,
 	)
 	if err != nil {
@@ -607,7 +598,7 @@ func (h *UniswapV3PoolHandler) FetchBlockchainInteractions(
 }
 
 func (h *UniswapV3PoolHandler) humanVolumeOfToken(amount *big.Int, token *trade.Token, dealTime *time.Time) (*big.Rat, *big.Rat, *big.Rat, error) {
-	closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, token.Symbol, dealTime)
+	closePrice, err := h.cm.GetCachedSymbolPriceAtTime(token.Symbol, dealTime)
 	if err != nil {
 		return nil, nil, nil, err
 	}

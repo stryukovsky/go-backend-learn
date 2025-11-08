@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade/analytics"
 	"github.com/stryukovsky/go-backend-learn/trade/api"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
@@ -20,7 +19,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func Api(db *gorm.DB, cache *redis.Client) {
+func Api(db *gorm.DB, cache *cache.CacheManager) {
 	router := gin.Default()
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"*"}
@@ -43,16 +42,19 @@ func main() {
 		Logger: newLogger,
 	})
 	if err != nil {
-		panic("Cannot start db connection" + err.Error())
+		panic("Cannot start db connection " + err.Error())
 	}
-	redis := cache.NewRedisClient()
+	cm, err := cache.NewCacheManager([]string{}, "localhost:6379", "redis", 0)
+	if err != nil {
+		panic("Cannot instantiate cache manager " + err.Error())
+	}
 	cmd := &cli.Command{
 		Commands: []*cli.Command{
 			{
 				Name:  "serve",
 				Usage: "Run backend server with API",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					Api(db, redis)
+					Api(db, cm)
 					return nil
 				},
 			},
@@ -76,7 +78,7 @@ func main() {
 				Name:  "index",
 				Usage: "Index events",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					worker.Cycle(db, redis, 1)
+					worker.Cycle(db, cm, 1)
 					return nil
 				},
 			},
@@ -84,7 +86,7 @@ func main() {
 				Name:  "analyze",
 				Usage: "Analyze UniswapV3",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					analytics.Analyze(1000000, db, redis)
+					analytics.Analyze(1000000, db, cm)
 					return nil
 				},
 			},

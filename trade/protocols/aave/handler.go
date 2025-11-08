@@ -11,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
@@ -20,7 +19,7 @@ import (
 
 type AaveHandler struct {
 	pool           AavePool
-	rdb            *redis.Client
+	cm            *cache.CacheManager
 	db             *gorm.DB
 	name           string
 	tokens         []trade.Token
@@ -32,7 +31,7 @@ func (h *AaveHandler) ParallelFactor() int { return h.parallelFactor }
 func NewAaveHandler(
 	instance trade.DeFiPlatform,
 	client *ethclient.Client,
-	rdb *redis.Client,
+	rdb *cache.CacheManager,
 	tokens []trade.Token,
 	parallelFactor int,
 ) (*AaveHandler, error) {
@@ -42,7 +41,7 @@ func NewAaveHandler(
 	}
 	return &AaveHandler{
 		pool:           *pool,
-		rdb:            rdb,
+		cm:            rdb,
 		name:           fmt.Sprintf("Aave on %s", instance.Address),
 		tokens:         tokens,
 		parallelFactor: parallelFactor,
@@ -73,7 +72,7 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 						slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
 					case PoolSupply:
 						var event PoolSupply = generalEvent
-						timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
+						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 						if err != nil {
 							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
 							wg.Done()
@@ -92,7 +91,7 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 						valuesCh <- item
 					case PoolWithdraw:
 						var event PoolWithdraw = generalEvent
-						timestamp, err := cache.GetCachedBlockTimestamp(h.pool.client, h.rdb, event.Raw.BlockNumber)
+						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 						if err != nil {
 							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
 							wg.Done()
@@ -197,7 +196,7 @@ func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([
 			continue
 		}
 
-		closePrice, err := cache.GetCachedSymbolPriceAtTime(h.rdb, token.Symbol, &interaction.Timestamp)
+		closePrice, err := h.cm.GetCachedSymbolPriceAtTime(token.Symbol, &interaction.Timestamp)
 		if err != nil {
 			return nil, err
 		}

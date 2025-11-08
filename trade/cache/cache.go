@@ -17,30 +17,59 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	BadRationalValue error = errors.New("Bad rational value stored in cache")
-)
+var BadRationalValue error = errors.New("Bad rational value stored in cache")
+
+type CacheManager struct {
+	clients []ethclient.Client
+	rdb     redis.Client
+}
+
+func NewCacheManager(ethereumUrls []string, redisAddr, redisPassword string, redisDb int) (*CacheManager, error) {
+	clients := make([]ethclient.Client, len(ethereumUrls))
+	for i, url := range ethereumUrls {
+		client, err := ethclient.Dial(url)
+		if err != nil {
+			return nil, err
+		}
+		clients[i] = *client
+	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: redisPassword,
+		DB:       redisDb,
+	})
+	return &CacheManager{clients, *rdb}, nil
+}
+
+func (cm *CacheManager) GetClient() *ethclient.Client {
+	result := trade.RandomChoice(cm.clients)
+	return &result
+}
+
+func (cm *CacheManager) Set(key string, value any) error {
+	return cm.rdb.Set(ctx, key, value, 0).Err()
+}
+
+func (cm *CacheManager) SetWithTTL(key string, value any, ttl time.Duration) error {
+	return cm.rdb.Set(ctx, key, value, ttl).Err()
+}
+
+func (cm *CacheManager) Get(key string) (string, error) {
+	return cm.rdb.Get(ctx, key).Result()
+}
 
 var ctx = context.Background()
 
-func NewRedisClient() *redis.Client {
-	return redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "redis",
-		DB:       0,
-	})
-}
-
-func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block uint64) (*time.Time, error) {
+func (cm *CacheManager) GetCachedBlockTimestamp(block uint64) (*time.Time, error) {
 	blockIdentifierStr := fmt.Sprintf("block:%d", block)
-	timestampString, err := rdb.Get(ctx, blockIdentifierStr).Result()
+	timestampString, err := cm.Get(blockIdentifierStr)
 	if err != nil {
 		if err != redis.Nil {
 			return nil, err
 		}
 		slog.Debug(fmt.Sprintf("[Cache] Block %s is new, fetching its date from blockchain", blockIdentifierStr))
 
-		blockHeader, err := client.HeaderByNumber(context.Background(), big.NewInt(int64(block)))
+		blockHeader, err := cm.GetClient().HeaderByNumber(context.Background(), big.NewInt(int64(block)))
 		time.Sleep(time.Second * 1)
 		if err != nil {
 			return nil, err
@@ -50,7 +79,7 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 			return nil, fmt.Errorf("[Cache] Invalid timestamp. Timestamp: %d", blockTimestamp)
 		}
 		blockTimestampString := fmt.Sprintf("%d", blockTimestamp)
-		err = rdb.Set(ctx, blockIdentifierStr, blockTimestampString, 0).Err()
+		err = cm.Set(blockIdentifierStr, blockTimestampString)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("[Cache] Cannot update value in cache %s=%s", blockIdentifierStr, blockTimestampString))
 			return nil, err
@@ -68,11 +97,11 @@ func GetCachedBlockTimestamp(client *ethclient.Client, rdb *redis.Client, block 
 	return &result, nil
 }
 
-func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.Time) (*big.Rat, error) {
+func (cm *CacheManager) GetCachedSymbolPriceAtTime(symbol string, instant *time.Time) (*big.Rat, error) {
 	truncated := instant.Truncate(5 * time.Minute)
 	instantString := fmt.Sprintf("%d", truncated.UnixMilli())
 	identifierStr := fmt.Sprintf("quote:%s:%s", symbol, instantString)
-	quoteString, err := rdb.Get(ctx, identifierStr).Result()
+	quoteString, err := cm.Get(identifierStr)
 	if err != nil {
 		if err == redis.Nil {
 			price, err := binance.GetClosePrice(symbol, &truncated)
@@ -80,7 +109,7 @@ func GetCachedSymbolPriceAtTime(rdb *redis.Client, symbol string, instant *time.
 				slog.Warn(fmt.Sprintf("[Cache] Cannot get price for symbol %s at instant %s: %s", symbol, instantString, err.Error()))
 				return nil, err
 			}
-			err = rdb.Set(ctx, identifierStr, price.String(), 0).Err()
+			err = cm.Set(identifierStr, price.String())
 			if err != nil {
 				slog.Warn(fmt.Sprintf("[Cache] Cannot update in cache price of symbol %s at instant %s ms: %s", symbol, instantString, err.Error()))
 				return nil, err
@@ -111,9 +140,9 @@ func calculateBalance(income []trade.Deal, outcome []trade.Deal) string {
 	return balance
 }
 
-func GetCachedBalanceOfWallet(db *gorm.DB, rdb *redis.Client, walletAddress string) (*trade.BalanceAcrossAllChains, error) {
+func (cm *CacheManager) GetCachedBalanceOfWallet(db *gorm.DB, walletAddress string) (*trade.BalanceAcrossAllChains, error) {
 	cacheKey := fmt.Sprintf("balanceAcrossAllChains:%s", walletAddress)
-	cachedBalance, err := rdb.Get(context.Background(), cacheKey).Result()
+	cachedBalance, err := cm.Get(cacheKey)
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
@@ -135,7 +164,7 @@ func GetCachedBalanceOfWallet(db *gorm.DB, rdb *redis.Client, walletAddress stri
 
 		balance := calculateBalance(dealsIncome, dealsOutcome)
 		cachedData, _ := json.Marshal(trade.BalanceAcrossAllChains{Address: walletAddress, Balance: balance})
-		rdb.Set(ctx, cacheKey, cachedData, 5*time.Minute)
+		cm.SetWithTTL(cacheKey, cachedData, 5*time.Minute)
 		return trade.NewBalanceAcrossAllChains(walletAddress, balance), nil
 
 	} else {
@@ -148,9 +177,9 @@ func GetCachedBalanceOfWallet(db *gorm.DB, rdb *redis.Client, walletAddress stri
 	}
 }
 
-func GetCachedBalanceOfWalletOnChain(db *gorm.DB, rdb *redis.Client, chainId string, walletAddress string) (*trade.BalanceOnChain, error) {
+func (cm *CacheManager) GetCachedBalanceOfWalletOnChain(db *gorm.DB, chainId string, walletAddress string) (*trade.BalanceOnChain, error) {
 	key := fmt.Sprintf("BalanceOnChain:%s:%s", chainId, walletAddress)
-	cached, err := rdb.Get(context.Background(), key).Result()
+	cached, err := cm.Get(key)
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
@@ -183,7 +212,7 @@ func GetCachedBalanceOfWalletOnChain(db *gorm.DB, rdb *redis.Client, chainId str
 	balance := calculateBalance(dealsIncome, dealsOutcome)
 
 	result := trade.NewBalanceOnChain(chainId, walletAddress, balance)
-	err = rdb.Set(context.Background(), key, result, 15*time.Minute).Err()
+	err = cm.SetWithTTL(key, result, 15*time.Minute)
 	if err != nil {
 		return nil, err
 	}

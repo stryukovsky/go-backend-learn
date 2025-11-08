@@ -8,8 +8,9 @@ import (
 )
 
 func Fixture(db *gorm.DB) {
-	db.Create(&trade.Worker{BlockchainUrl: "http://localhost:8545", BlocksInterval: 1000})
-	db.Create(&trade.AnalyticsWorker{BlockchainUrl: "http://localhost:8545", BlocksInterval: 1000, LastBlock: 12369651})
+	url := "http://localhost:8545"
+	db.Create(&trade.Worker{BlockchainUrls: []*string{&url}, BlocksInterval: 1000})
+	db.Create(&trade.AnalyticsWorker{BlockchainUrls: []*string{&url}, BlocksInterval: 1000, LastBlock: 12369651})
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28", LastBlock: 23152597})
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x49ecd0F2De4868E5130fdC2C45D4d97444B7c269", LastBlock: 23495633})
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af", LastBlock: 23153501})

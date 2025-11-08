@@ -318,13 +318,13 @@ func NewERC20Transfer(
 
 type Worker struct {
 	gorm.Model
-	BlockchainUrl  string `json:"blockchainUrl" binding:"required"`
+	BlockchainUrls  []*string `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
 	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
 }
 
 type AnalyticsWorker struct {
 	gorm.Model
-	BlockchainUrl  string `json:"blockchainUrl" binding:"required"`
+	BlockchainUrls  []*string `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
 	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
 	LastBlock      uint64 `json:"lastBlock" binding:"required"`
 }

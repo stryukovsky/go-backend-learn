@@ -10,8 +10,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/aave"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/hodl"
@@ -84,7 +84,7 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 	return nil
 }
 
-func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
+func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 	slog.Info("Starting worker")
 	var config trade.Worker
 	result := db.First(&config, id)
@@ -93,7 +93,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		return
 	}
 
-	client, err := ethclient.Dial(config.BlockchainUrl)
+	client, err := ethclient.Dial(*config.BlockchainUrls[0])
 	if err != nil {
 		slog.Error(fmt.Sprintf("Failed to connect to Ethereum node: %s", err.Error()))
 		return
@@ -140,7 +140,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 
 	var erc20Handlers []protocols.DeFiProtocolHandler[trade.ERC20Transfer, trade.Deal]
 	for _, token := range tokensFromDB {
-		erc20, err := hodl.NewHODLHandler(client, token, rdb, ParallelFactor)
+		erc20, err := hodl.NewHODLHandler(client, token, cm, ParallelFactor)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot create token %s: %e", token.Address, err))
 			continue
@@ -160,7 +160,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 	for _, aaveInstance := range aaveInstances {
 		var tokens []trade.Token
 		db.Find(&tokens, trade.Token{ChainId: aaveInstance.ChainId})
-		aaveHandler, err := aave.NewAaveHandler(aaveInstance, client, rdb, tokens, ParallelFactor)
+		aaveHandler, err := aave.NewAaveHandler(aaveInstance, client, cm, tokens, ParallelFactor)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot get aave platform handler: %s", err.Error()))
 			continue
@@ -181,7 +181,7 @@ func Cycle(db *gorm.DB, rdb *redis.Client, id uint) {
 		uniswapv3Handler, err := uniswapv3.NewUniswapV3PoolHandler(
 			uniswapv3Instance,
 			client,
-			rdb,
+			cm,
 			db,
 			ParallelFactor,
 		)

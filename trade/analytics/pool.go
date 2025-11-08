@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/redis/go-redis/v9"
 	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
+	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/uniswapv3"
 	"gorm.io/gorm"
 )
@@ -84,7 +84,7 @@ func fetchInteractionsFromEthJSONRPC(
 	return nil
 }
 
-func Analyze(blocksCount uint64, db *gorm.DB, rdb *redis.Client) {
+func Analyze(blocksCount uint64, db *gorm.DB, cm *cache.CacheManager) {
 	slog.Info("Starting worker")
 	var config trade.AnalyticsWorker
 	result := db.First(&config)
@@ -95,13 +95,16 @@ func Analyze(blocksCount uint64, db *gorm.DB, rdb *redis.Client) {
 	startBlock := config.LastBlock
 	currentBlock := startBlock
 
-	client, err := ethclient.Dial(config.BlockchainUrl)
-	if err != nil {
-		slog.Error(fmt.Sprintf("Failed to connect to Ethereum node: %s", err.Error()))
-		return
-	}
+	clients:= lo.Map(config.BlockchainUrls, func(item *string, index int) *ethclient.Client{ 
+		eth, err := ethclient.Dial(*item)
+		if err != nil {
+			panic(err)
+		} else {
+			return eth
+		}
+	})
 
-	chainId, err := client.ChainID(context.Background())
+	chainId, err := clients[0].ChainID(context.Background())
 	if err != nil {
 		slog.Warn("Cannot fetch chain id")
 		return
@@ -121,8 +124,8 @@ func Analyze(blocksCount uint64, db *gorm.DB, rdb *redis.Client) {
 	for _, uv3pool := range uniswapV3Pools {
 		uniswapv3Handler, err := uniswapv3.NewUniswapV3PoolHandler(
 			uv3pool,
-			client,
-			rdb,
+			trade.RandomChoice(clients),
+			cm,
 			db,
 			ParallelFactor,
 		)
@@ -136,7 +139,7 @@ func Analyze(blocksCount uint64, db *gorm.DB, rdb *redis.Client) {
 	}
 
 	for {
-		lastBlockInBlockchain, err := client.BlockNumber(context.Background())
+		lastBlockInBlockchain, err := trade.RandomChoice(clients).BlockNumber(context.Background())
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %s", err.Error()))
 			return

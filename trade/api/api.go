@@ -7,7 +7,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"gorm.io/gorm"
@@ -17,9 +16,9 @@ func apiErr(ctx *gin.Context, err error) {
 	ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 }
 
-func BalanceByWallet(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
+func BalanceByWallet(ctx *gin.Context, db *gorm.DB, cm *cache.CacheManager) {
 	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
-	balance, err := cache.GetCachedBalanceOfWallet(db, rdb, walletAddress)
+	balance, err := cm.GetCachedBalanceOfWallet(db, walletAddress)
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -28,10 +27,10 @@ func BalanceByWallet(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
 	ctx.JSON(http.StatusOK, balance)
 }
 
-func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, rdb *redis.Client) {
+func BalanceByWalletAndChain(ctx *gin.Context, db *gorm.DB, cm *cache.CacheManager) {
 	walletAddress := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
-	result, err := cache.GetCachedBalanceOfWalletOnChain(db, rdb, chainId, walletAddress)
+	result, err := cm.GetCachedBalanceOfWalletOnChain(db, chainId, walletAddress)
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -121,7 +120,7 @@ func ListDealsByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 	ctx.JSON(http.StatusOK, result)
 }
 
-func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
+func CreateApi(router *gin.Engine, db *gorm.DB, cm *cache.CacheManager) {
 	router.GET("/api/wallets", func(ctx *gin.Context) {
 		ListWallets(ctx, db)
 	})
@@ -132,10 +131,10 @@ func CreateApi(router *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 		GetWalletsOnChain(ctx, db)
 	})
 	router.GET("/api/balance/chainAndWallet/:chainId/:wallet", func(ctx *gin.Context) {
-		BalanceByWalletAndChain(ctx, db, rdb)
+		BalanceByWalletAndChain(ctx, db, cm)
 	})
 	router.GET("/api/balance/wallet/:wallet", func(ctx *gin.Context) {
-		BalanceByWallet(ctx, db, rdb)
+		BalanceByWallet(ctx, db, cm)
 	})
 	router.GET("/api/deals/:chainId/:wallet", func(ctx *gin.Context) {
 		ListDealsByWalletAndChain(ctx, db)
