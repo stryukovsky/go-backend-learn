@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/binance"
@@ -19,19 +20,24 @@ import (
 
 var BadRationalValue error = errors.New("Bad rational value stored in cache")
 
+type CacheEthJSONRPC struct {
+	RpcUrl string
+	Eth ethclient.Client
+}
+
 type CacheManager struct {
-	clients []ethclient.Client
+	clients []CacheEthJSONRPC
 	rdb     redis.Client
 }
 
-func NewCacheManager(ethereumUrls []string, redisAddr, redisPassword string, redisDb int) (*CacheManager, error) {
-	clients := make([]ethclient.Client, len(ethereumUrls))
+func NewCacheManager(ethereumUrls pq.StringArray, redisAddr, redisPassword string, redisDb int) (*CacheManager, error) {
+	clients := make([]CacheEthJSONRPC, len(ethereumUrls))
 	for i, url := range ethereumUrls {
 		client, err := ethclient.Dial(url)
 		if err != nil {
 			return nil, err
 		}
-		clients[i] = *client
+		clients[i] = CacheEthJSONRPC{Eth: *client, RpcUrl: url}
 	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
@@ -41,8 +47,12 @@ func NewCacheManager(ethereumUrls []string, redisAddr, redisPassword string, red
 	return &CacheManager{clients, *rdb}, nil
 }
 
-func (cm *CacheManager) GetClient() *ethclient.Client {
-	result := trade.RandomChoice(cm.clients)
+func (cm *CacheManager) GetBasicClient() *ethclient.Client {
+	return &cm.clients[0].Eth
+}
+
+func (cm *CacheManager) GetReadonlyClient() *CacheEthJSONRPC {
+	result := trade.RandomChoice(cm.clients[1:])
 	return &result
 }
 
@@ -69,11 +79,13 @@ func (cm *CacheManager) GetCachedBlockTimestamp(block uint64) (*time.Time, error
 		}
 		slog.Debug(fmt.Sprintf("[Cache] Block %s is new, fetching its date from blockchain", blockIdentifierStr))
 
-		blockHeader, err := cm.GetClient().HeaderByNumber(context.Background(), big.NewInt(int64(block)))
-		time.Sleep(time.Second * 1)
+		client := cm.GetReadonlyClient()
+		blockHeader, err := client.Eth.HeaderByNumber(context.Background(), big.NewInt(int64(block)))
 		if err != nil {
+			slog.Warn(fmt.Sprintf("[Cache] Cannot get block header for %d block using %s: %s", block, client.RpcUrl, err.Error()))
 			return nil, err
 		}
+		time.Sleep(time.Second * 1)
 		blockTimestamp := blockHeader.Time
 		if blockTimestamp <= 0 {
 			return nil, fmt.Errorf("[Cache] Invalid timestamp. Timestamp: %d", blockTimestamp)
@@ -84,7 +96,7 @@ func (cm *CacheManager) GetCachedBlockTimestamp(block uint64) (*time.Time, error
 			slog.Warn(fmt.Sprintf("[Cache] Cannot update value in cache %s=%s", blockIdentifierStr, blockTimestampString))
 			return nil, err
 		}
-		slog.Info(fmt.Sprintf("[Cache] Written to cache pair %s = %s", blockIdentifierStr, blockTimestampString))
+		slog.Debug(fmt.Sprintf("[Cache] Written to cache pair %s = %s", blockIdentifierStr, blockTimestampString))
 		result := time.Unix(int64(blockTimestamp), 0)
 		return &result, nil
 	}

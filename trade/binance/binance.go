@@ -26,6 +26,9 @@ var (
 )
 
 func GetClosePrice(symbol string, instant *time.Time) (*big.Rat, error) {
+	if symbol == "USDT" {
+		return big.NewRat(1, 1), nil
+	}
 	params := url.Values{}
 	params.Add("symbol", GetQuoteId(symbol, "USDT"))
 	params.Add("interval", "1m")

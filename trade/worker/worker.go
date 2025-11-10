@@ -93,7 +93,7 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		return
 	}
 
-	client, err := ethclient.Dial(*config.BlockchainUrls[0])
+	client, err := ethclient.Dial(config.BlockchainUrls[0])
 	if err != nil {
 		slog.Error(fmt.Sprintf("Failed to connect to Ethereum node: %s", err.Error()))
 		return
@@ -101,7 +101,7 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 
 	chainId, err := client.ChainID(context.Background())
 	if err != nil {
-		slog.Warn("Cannot fetch chain id")
+		slog.Warn(fmt.Sprintf("Cannot fetch chain id: %s", err.Error()))
 		return
 	}
 

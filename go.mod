@@ -7,6 +7,7 @@ require (
 	github.com/gin-contrib/cors v1.7.6
 	github.com/gin-gonic/gin v1.10.1
 	github.com/jackc/pgx/v5 v5.6.0
+	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/samber/lo v1.51.0
 	github.com/urfave/cli/v3 v3.4.1

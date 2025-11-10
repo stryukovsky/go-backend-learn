@@ -538,7 +538,7 @@ func (h *UniswapV3PoolHandler) FetchLiquidityInteractions(
 	}
 	for _, event := range transferEvents {
 		if event.From == addressZero {
-			slog.Info(fmt.Sprintf(
+			slog.Debug(fmt.Sprintf(
 				"[%s] Found new position minted to %s with id %s",
 				h.Name(),
 				event.To.Hex(),

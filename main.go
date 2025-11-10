@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/analytics"
 	"github.com/stryukovsky/go-backend-learn/trade/api"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
@@ -19,12 +20,12 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func Api(db *gorm.DB, cache *cache.CacheManager) {
+func Api(db *gorm.DB, cm *cache.CacheManager) {
 	router := gin.Default()
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"*"}
 	router.Use(cors.New(config))
-	api.CreateApi(router, db, cache)
+	api.CreateApi(router, db, cm)
 	router.Run()
 }
 
@@ -33,7 +34,7 @@ func main() {
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
 			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Error, // Only log errors, not queries
+			LogLevel:                  logger.Silent, 
 			IgnoreRecordNotFoundError: false,
 			Colorful:                  false,
 		},
@@ -44,7 +45,13 @@ func main() {
 	if err != nil {
 		panic("Cannot start db connection " + err.Error())
 	}
-	cm, err := cache.NewCacheManager([]string{}, "localhost:6379", "redis", 0)
+
+	var config trade.AnalyticsWorker
+	result := db.First(&config)
+	if result.Error != nil {
+		panic("No config")
+	}
+	cm, err := cache.NewCacheManager(config.BlockchainUrls, "localhost:6379", "redis", 0)
 	if err != nil {
 		panic("Cannot instantiate cache manager " + err.Error())
 	}

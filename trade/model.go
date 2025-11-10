@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -318,15 +319,15 @@ func NewERC20Transfer(
 
 type Worker struct {
 	gorm.Model
-	BlockchainUrls  []*string `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
-	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
+	BlockchainUrls pq.StringArray `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
+	BlocksInterval uint64    `json:"blocksInterval" binding:"required"`
 }
 
 type AnalyticsWorker struct {
 	gorm.Model
-	BlockchainUrls  []*string `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
-	BlocksInterval uint64 `json:"blocksInterval" binding:"required"`
-	LastBlock      uint64 `json:"lastBlock" binding:"required"`
+	BlockchainUrls pq.StringArray `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
+	BlocksInterval uint64    `json:"blocksInterval" binding:"required"`
+	LastBlock      uint64    `json:"lastBlock" binding:"required"`
 }
 
 type Token struct {
