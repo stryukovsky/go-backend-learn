@@ -22,7 +22,7 @@ var BadRationalValue error = errors.New("Bad rational value stored in cache")
 
 type CacheEthJSONRPC struct {
 	RpcUrl string
-	Eth ethclient.Client
+	Eth    ethclient.Client
 }
 
 type CacheManager struct {
