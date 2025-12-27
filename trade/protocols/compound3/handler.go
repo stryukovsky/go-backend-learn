@@ -1,4 +1,3 @@
-
 package compound3
 
 import (
@@ -18,8 +17,8 @@ import (
 	"gorm.io/gorm"
 )
 
-type AaveHandler struct {
-	pool           AavePool
+type Compound3Handler struct {
+	compoundCometContract          Compound3 
 	cm            *cache.CacheManager
 	db             *gorm.DB
 	name           string
@@ -27,37 +26,37 @@ type AaveHandler struct {
 	parallelFactor int
 }
 
-func (h *AaveHandler) ParallelFactor() int { return h.parallelFactor }
+func (h *Compound3Handler) ParallelFactor() int { return h.parallelFactor }
 
-func NewAaveHandler(
+func NewCompound3Handler(
 	instance trade.DeFiPlatform,
 	client *ethclient.Client,
 	rdb *cache.CacheManager,
 	tokens []trade.Token,
 	parallelFactor int,
-) (*AaveHandler, error) {
-	pool, err := NewAavePool(client, instance.Address)
+) (*Compound3Handler, error) {
+	compoundComet, err := NewCompound3(client, instance.Address)
 	if err != nil {
 		return nil, err
 	}
-	return &AaveHandler{
-		pool:           *pool,
+	return &Compound3Handler{
+		compoundCometContract:           *compoundComet,
 		cm:            rdb,
-		name:           fmt.Sprintf("Aave on %s", instance.Address),
+		name:           fmt.Sprintf("Compound3 on %s", instance.Address),
 		tokens:         tokens,
 		parallelFactor: parallelFactor,
 	}, nil
 }
 
-func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.AaveEvent, error) {
+func(h *Compound3Handler) parseCompound3Events(chainId string, events []any) ([]trade.Compound3Event, error) {
 	chunkSize := len(events) / h.ParallelFactor()
 	if chunkSize == 0 {
-		return []trade.AaveEvent{}, nil
+		return []trade.Compound3Event{}, nil
 	}
 	eventChunks := lo.Chunk(events, chunkSize)
 	var wg sync.WaitGroup
 	wg.Add(h.ParallelFactor())
-	valuesCh := make(chan trade.AaveEvent, h.ParallelFactor())
+	valuesCh := make(chan trade.Compound3Event, h.ParallelFactor())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer ctx.Done()
 	for i, chunk := range eventChunks {
@@ -71,38 +70,79 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 					switch generalEvent := generalEvent.(type) {
 					default:
 						slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
-					case PoolSupply:
-						var event PoolSupply = generalEvent
+					case CometSupply:
+						var event CometSupply = generalEvent
 						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 						if err != nil {
 							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
 							wg.Done()
 							cancel()
 						}
-						item := trade.NewAaveEvent(
+						item := trade.NewCompound3Event(
 							chainId,
 							"supply",
-							event.OnBehalfOf,
-							event.Reserve,
+							event.Dst,
+							h.compoundCometContract.MainAsset,
 							event.Amount,
 							*timestamp,
 							event.Raw.TxHash.Hex(),
 							event.Raw.Index,
 						)
 						valuesCh <- item
-					case PoolWithdraw:
-						var event PoolWithdraw = generalEvent
+
+					case CometSupplyCollateral:
+						var event CometSupplyCollateral = generalEvent
+						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+						if err != nil {
+							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
+							wg.Done()
+							cancel()
+						}
+						item := trade.NewCompound3Event(
+							chainId,
+							"supply",
+							event.Dst,
+							event.Asset,
+							event.Amount,
+							*timestamp,
+							event.Raw.TxHash.Hex(),
+							event.Raw.Index,
+						)
+						valuesCh <- item
+
+					case CometWithdrawCollateral:
+						var event CometWithdrawCollateral = generalEvent
 						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 						if err != nil {
 							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
 							wg.Done()
 							cancel()
 						}
-						item := trade.NewAaveEvent(
+						item := trade.NewCompound3Event(
 							chainId,
 							"withdraw",
 							event.To,
-							event.Reserve,
+							event.Asset,
+							event.Amount,
+							*timestamp,
+							event.Raw.TxHash.Hex(),
+							event.Raw.Index,
+						)
+						valuesCh <- item
+
+					case CometWithdraw:
+						var event CometWithdraw= generalEvent
+						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+						if err != nil {
+							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
+							wg.Done()
+							cancel()
+						}
+						item := trade.NewCompound3Event(
+							chainId,
+							"withdraw",
+							event.To,
+							h.compoundCometContract.MainAsset,
 							event.Amount,
 							*timestamp,
 							event.Raw.TxHash.Hex(),
@@ -116,7 +156,7 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 		}()
 	}
 	wg.Wait()
-	result := make([]trade.AaveEvent, len(events))
+	result := make([]trade.Compound3Event, len(events))
 	i := 0
 	for item := range valuesCh {
 		result[i] = item
@@ -126,33 +166,50 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 	return result, nil
 }
 
-func (h *AaveHandler) FetchBlockchainInteractions(
+func (h *Compound3Handler) FetchBlockchainInteractions(
 	chainId string,
 	participants []string,
 	fromBlock uint64,
 	toBlock uint64,
-) ([]trade.AaveEvent, error) {
+) ([]trade.Compound3Event, error) {
 	formattedParticipants := make([]common.Address, len(participants))
 	for i, p := range participants {
 		formattedParticipants[i] = common.HexToAddress(p)
 	}
-	supplyEventsIter, err := h.pool.filterer.FilterSupply(
+	supplyEventsIter, err := h.compoundCometContract.filterer.FilterSupply(
 		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
 		[]common.Address{},
 		formattedParticipants,
-		[]uint16{},
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer supplyEventsIter.Close()
-	withdrawEventsIter, err := h.pool.filterer.FilterWithdraw(
-		&bind.FilterOpts{Start: fromBlock, End: &toBlock}, []common.Address{}, []common.Address{}, formattedParticipants)
+
+	collateralSupplyEventsIter, err := h.compoundCometContract.filterer.FilterSupplyCollateral(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock},
+		[]common.Address{},
+		formattedParticipants,
+		[]common.Address{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer collateralSupplyEventsIter.Close()
+
+	withdrawEventsIter, err := h.compoundCometContract.filterer.FilterWithdraw(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock}, []common.Address{}, formattedParticipants)
 	if err != nil {
 		return nil, err
 	}
 	defer withdrawEventsIter.Close()
 
+	collateralWithdrawEventsIter, err := h.compoundCometContract.filterer.FilterWithdrawCollateral(
+		&bind.FilterOpts{Start: fromBlock, End: &toBlock}, []common.Address{}, formattedParticipants, []common.Address{})
+	if err != nil {
+		return nil, err
+	}
+	defer collateralWithdrawEventsIter.Close()
 	// any is because go do not support generic methods, we have two types for each event: Supply and Withdraw
 	eventsRaw := make([]any, 0)
 	for supplyEventsIter.Next() {
@@ -161,6 +218,12 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 		}
 		eventsRaw = append(eventsRaw, *supplyEventsIter.Event)
 	}
+	for collateralSupplyEventsIter.Next() {
+		if err = collateralSupplyEventsIter.Error(); err != nil {
+			return nil, err
+		}
+		eventsRaw = append(eventsRaw, *collateralSupplyEventsIter.Event)
+	}
 	for withdrawEventsIter.Next() {
 		err := withdrawEventsIter.Error()
 		if err != nil {
@@ -168,21 +231,28 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 		}
 		eventsRaw = append(eventsRaw, *withdrawEventsIter.Event)
 	}
+	for collateralWithdrawEventsIter.Next() {
+		err := collateralWithdrawEventsIter.Error()
+		if err != nil {
+			return nil, err
+		}
+		eventsRaw = append(eventsRaw, *collateralWithdrawEventsIter.Event)
+	}
 	if len(eventsRaw) == 0 {
 		slog.Warn(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
-		return make([]trade.AaveEvent, 0), nil
+		return make([]trade.Compound3Event, 0), nil
 	} else {
 		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
 	}
-	events, err := h.parseAaveEvents(chainId, eventsRaw)
+	events, err := h.parseCompound3Events(chainId, eventsRaw)
 	if err != nil {
 		return nil, err
 	}
 	return events, nil
 }
 
-func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([]trade.AaveInteraction, error) {
-	result := make([]trade.AaveInteraction, len(interactions))
+func (h *Compound3Handler) PopulateWithFinanceInfo(interactions []trade.Compound3Event) ([]trade.Compound3Interaction, error) {
+	result := make([]trade.Compound3Interaction, len(interactions))
 	for i, interaction := range interactions {
 		tokenAddress := common.HexToAddress(interaction.TokenAddress)
 		token := trade.Token{}
@@ -207,7 +277,7 @@ func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([
 		volumeToken = volumeToken.SetFrac(interaction.Amount.Int, decimalsMultiplier)
 
 		volumeUSD := new(big.Rat).Mul(volumeToken, closePrice)
-		deal := trade.AaveInteraction{
+		deal := trade.Compound3Interaction{
 			Price:           trade.NewDBNumeric(closePrice),
 			VolumeTokens:    trade.NewDBNumeric(volumeToken),
 			VolumeUSD:       trade.NewDBNumeric(volumeUSD),
@@ -217,4 +287,4 @@ func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([
 	}
 	return result, nil
 }
-func (h *AaveHandler) Name() string { return h.name }
+func (h *Compound3Handler) Name() string { return h.name }

@@ -70,6 +70,7 @@ func Fixture(db *gorm.DB) {
 		})
 	db.Create(&trade.Chain{Name: "Ethereum mainnet", ChainId: "1"})
 	db.Create(&trade.DeFiPlatform{Type: trade.Aave, ChainId: "1", Address: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"})
+	db.Create(&trade.DeFiPlatform{Type: trade.Compound3, ChainId: "1", Address: "0xc3d688B66703497DAA19211EEdff47f25384cdc3"})
 
 	// Uniswap V3 Pools for Ethereum Mainnet
 	// Fee tiers: 100 (0.01%), 500 (0.05%), 3000 (0.3%), 10000 (1%)

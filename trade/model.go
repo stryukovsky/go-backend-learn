@@ -151,6 +151,49 @@ func NewAaveEvent(
 	}
 }
 
+type Compound3Interaction struct {
+	gorm.Model
+	Price             DBNumeric `json:"price" binding:"required"`
+	VolumeTokens      DBNumeric `json:"volumeTokens" binding:"required"`
+	VolumeUSD         DBNumeric `json:"volumeUSD" binding:"required"`
+	BlockchainEventID int
+	BlockchainEvent   Compound3Event `json:"blockchainEvent" binding:"required"`
+}
+
+type Compound3Event struct {
+	gorm.Model
+	ChainId       string    `json:"chainId" binding:"required" gorm:"uniqueIndex:aave_idx_event_uniqueness"`
+	Direction     string    `json:"direction" binding:"required"`
+	WalletAddress string    `json:"walletAddress" binding:"required"`
+	TokenAddress  string    `json:"tokenAddress" binding:"required"`
+	Amount        DBInt     `json:"amount" binding:"required"`
+	Timestamp     time.Time `json:"timestamp" binding:"required"`
+	TxId          string    `json:"txId" binding:"required" gorm:"uniqueIndex:aave_idx_event_uniqueness"`
+	LogIndex      uint      `json:"logIndex" binding:"required" gorm:"uniqueIndex:aave_idx_event_uniqueness"`
+}
+
+func NewCompound3Event(
+	chainId string,
+	direction string,
+	walletAddress common.Address,
+	tokenAddress common.Address,
+	amount *big.Int,
+	timestamp time.Time,
+	txId string,
+	logIndex uint,
+) Compound3Event {
+	return Compound3Event{
+		ChainId:       chainId,
+		Direction:     direction,
+		WalletAddress: walletAddress.Hex(),
+		TokenAddress:  tokenAddress.Hex(),
+		Amount:        DBInt{amount},
+		Timestamp:     timestamp,
+		TxId:          txId,
+		LogIndex:      logIndex,
+	}
+}
+
 const (
 	UniswapV3Swap    = "Swap"
 	UniswapV3Mint    = "Mint"
@@ -320,14 +363,14 @@ func NewERC20Transfer(
 type Worker struct {
 	gorm.Model
 	BlockchainUrls pq.StringArray `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
-	BlocksInterval uint64    `json:"blocksInterval" binding:"required"`
+	BlocksInterval uint64         `json:"blocksInterval" binding:"required"`
 }
 
 type AnalyticsWorker struct {
 	gorm.Model
 	BlockchainUrls pq.StringArray `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
-	BlocksInterval uint64    `json:"blocksInterval" binding:"required"`
-	LastBlock      uint64    `json:"lastBlock" binding:"required"`
+	BlocksInterval uint64         `json:"blocksInterval" binding:"required"`
+	LastBlock      uint64         `json:"lastBlock" binding:"required"`
 }
 
 type Token struct {
@@ -340,6 +383,7 @@ type Token struct {
 
 const (
 	Aave      = "Aave"
+	Compound3 = "Compound3"
 	UniswapV3 = "UniswapV3"
 )
 

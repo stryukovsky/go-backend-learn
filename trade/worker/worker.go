@@ -3,10 +3,9 @@ package worker
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
-
-	"log/slog"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,6 +13,7 @@ import (
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/aave"
+	"github.com/stryukovsky/go-backend-learn/trade/protocols/compound3"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/hodl"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/uniswapv3"
 	"gorm.io/gorm"
@@ -29,7 +29,8 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 	startBlock uint64,
 	endBlock uint64,
 	handlers []protocols.DeFiProtocolHandler[A, B],
-	participants []string) error {
+	participants []string,
+) error {
 	for _, handler := range handlers {
 		blockchainInteractions, err := handler.FetchBlockchainInteractions(
 			chainId,
@@ -170,6 +171,26 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		aaveHandlers = append(aaveHandlers, casted)
 	}
 
+	var compoundInstances []trade.DeFiPlatform
+	err = db.Find(&compoundInstances, &trade.DeFiPlatform{ChainId: chainId.String(), Type: trade.Compound3}).Error
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Cannot get compound platform instances: %s", err.Error()))
+		return
+	}
+	var compoundHandlers []protocols.DeFiProtocolHandler[trade.Compound3Event, trade.Compound3Interaction]
+	for _, compoundInstance := range compoundInstances {
+		var tokens []trade.Token
+		db.Find(&tokens, trade.Token{ChainId: compoundInstance.ChainId})
+		compoundHandler, err := compound3.NewCompound3Handler(compoundInstance, client, cm, tokens, ParallelFactor)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Cannot get compound platform handler: %s", err.Error()))
+			continue
+		}
+		var casted protocols.DeFiProtocolHandler[trade.Compound3Event, trade.Compound3Interaction]
+		casted = compoundHandler
+		compoundHandlers = append(compoundHandlers, casted)
+	}
+
 	var uniswapV3Pools []trade.DeFiPlatform
 	err = db.Find(&uniswapV3Pools, &trade.DeFiPlatform{ChainId: chainId.String(), Type: trade.UniswapV3}).Error
 	if err != nil {
@@ -218,6 +239,18 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		)
 		if err != nil {
 			slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
+		}
+
+		err = fetchInteractionsFromEthJSONRPC(
+			chainId.String(),
+			tx,
+			startBlock,
+			endBlock,
+			compoundHandlers,
+			participants,
+		)
+		if err != nil {
+			slog.Info(fmt.Sprintf("Cannot fetch Compound3 interactions due to %s", err.Error()))
 		}
 
 		err = fetchInteractionsFromEthJSONRPC(
