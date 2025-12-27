@@ -19,7 +19,7 @@ import (
 
 type AaveHandler struct {
 	pool           AavePool
-	cm            *cache.CacheManager
+	cm             *cache.CacheManager
 	db             *gorm.DB
 	name           string
 	tokens         []trade.Token
@@ -41,7 +41,7 @@ func NewAaveHandler(
 	}
 	return &AaveHandler{
 		pool:           *pool,
-		cm:            rdb,
+		cm:             rdb,
 		name:           fmt.Sprintf("Aave on %s", instance.Address),
 		tokens:         tokens,
 		parallelFactor: parallelFactor,
@@ -115,11 +115,9 @@ func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.Aav
 		}()
 	}
 	wg.Wait()
-	result := make([]trade.AaveEvent, len(events))
-	i := 0
+	result := make([]trade.AaveEvent, 0, len(events))
 	for item := range valuesCh {
-		result[i] = item
-		i++
+		result = append(result, item)
 	}
 	cancel()
 	return result, nil
@@ -181,8 +179,8 @@ func (h *AaveHandler) FetchBlockchainInteractions(
 }
 
 func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([]trade.AaveInteraction, error) {
-	result := make([]trade.AaveInteraction, len(interactions))
-	for i, interaction := range interactions {
+	result := make([]trade.AaveInteraction, 0, len(interactions))
+	for _, interaction := range interactions {
 		tokenAddress := common.HexToAddress(interaction.TokenAddress)
 		token := trade.Token{}
 		for _, t := range h.tokens {
@@ -212,7 +210,7 @@ func (h *AaveHandler) PopulateWithFinanceInfo(interactions []trade.AaveEvent) ([
 			VolumeUSD:       trade.NewDBNumeric(volumeUSD),
 			BlockchainEvent: interaction,
 		}
-		result[i] = deal
+		result = append(result, deal)
 	}
 	return result, nil
 }

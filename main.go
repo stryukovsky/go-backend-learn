@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -29,12 +30,21 @@ func Api(db *gorm.DB, cm *cache.CacheManager) {
 	router.Run()
 }
 
+func instantiateCache(db *gorm.DB) (*cache.CacheManager, error) {
+	var config trade.Worker
+	result := db.First(&config)
+	if result.Error != nil {
+		return nil, fmt.Errorf("No config")
+	}
+	return cache.NewCacheManager(config.BlockchainUrls, "localhost:6379", "redis", 0)
+}
+
 func main() {
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
 		logger.Config{
 			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Silent, 
+			LogLevel:                  logger.Silent,
 			IgnoreRecordNotFoundError: false,
 			Colorful:                  false,
 		},
@@ -46,21 +56,17 @@ func main() {
 		panic("Cannot start db connection " + err.Error())
 	}
 
-	var config trade.AnalyticsWorker
-	result := db.First(&config)
-	if result.Error != nil {
-		panic("No config")
-	}
-	cm, err := cache.NewCacheManager(config.BlockchainUrls, "localhost:6379", "redis", 0)
-	if err != nil {
-		panic("Cannot instantiate cache manager " + err.Error())
-	}
 	cmd := &cli.Command{
 		Commands: []*cli.Command{
 			{
-				Name:  "serve",
+				Name: "serve",
+
 				Usage: "Run backend server with API",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
+					cm, err := instantiateCache(db)
+					if err != nil {
+						panic("Cannot instantiate cache manager " + err.Error())
+					}
 					Api(db, cm)
 					return nil
 				},
@@ -85,6 +91,10 @@ func main() {
 				Name:  "index",
 				Usage: "Index events",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
+					cm, err := instantiateCache(db)
+					if err != nil {
+						panic("Cannot instantiate cache manager " + err.Error())
+					}
 					worker.Cycle(db, cm, 1)
 					return nil
 				},
@@ -93,11 +103,16 @@ func main() {
 				Name:  "analyze",
 				Usage: "Analyze UniswapV3",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
+					cm, err := instantiateCache(db)
+					if err != nil {
+						panic("Cannot instantiate cache manager " + err.Error())
+					}
 					analytics.Analyze(1000000, db, cm)
 					return nil
 				},
 			},
-		}}
+		},
+	}
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		panic("Cannot parse command " + err.Error())
 	}

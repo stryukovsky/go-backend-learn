@@ -79,7 +79,7 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 	slog.Info(fmt.Sprintf("Scanned %d transfers", len(allLogs)))
 	logsChunks := lo.Chunk(allLogs, h.ParallelFactor())
 	resultCh := make(chan trade.ERC20Transfer)
-	result := make([]trade.ERC20Transfer, len(allLogs))
+	result := make([]trade.ERC20Transfer, 0, len(allLogs))
 
 	var wg sync.WaitGroup
 	wg.Add(h.ParallelFactor())
@@ -110,10 +110,8 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 		wg.Wait()
 		close(resultCh)
 	}()
-	i := 0
 	for transfer := range resultCh {
-		result[i] = transfer
-		i++
+		result = append(result, transfer)
 	}
 
 	return result, nil

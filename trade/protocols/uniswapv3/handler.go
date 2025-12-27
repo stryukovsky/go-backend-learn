@@ -22,7 +22,7 @@ import (
 type UniswapV3PoolHandler struct {
 	pool            UniswapV3PoolInstance
 	positionManager NFPositionManagerInstance
-	cm             *cache.CacheManager
+	cm              *cache.CacheManager
 	db              *gorm.DB
 	name            string
 	tokenA          trade.Token
@@ -64,7 +64,7 @@ func NewUniswapV3PoolHandler(
 	return &UniswapV3PoolHandler{
 		pool:            *pool,
 		positionManager: *nfPositionManager,
-		cm:             cm,
+		cm:              cm,
 		db:              db,
 		name:            fmt.Sprintf("Uniswap V3 Pool %s - %s", tokenA.Symbol, tokenB.Symbol),
 		tokenA:          tokenA,
@@ -341,7 +341,8 @@ func (h *UniswapV3PoolHandler) parseEvents(
 									parsedEvent.WalletAddress = walletAddress.Hex()
 									parsedEvent.PositionTokenId = tokenId
 								} else {
-									slog.Warn(fmt.Sprintf("[%s] Token with tokenId %s found, but no wallet holding it found", h.Name(), tokenId))
+									slog.Warn(fmt.Sprintf(
+										"[%s] Token with tokenId %s found, but no wallet holding it found", h.Name(), tokenId))
 								}
 							} else {
 								slog.Warn(fmt.Sprintf("[%s] liquidity minted, but no token ID found", h.Name()))

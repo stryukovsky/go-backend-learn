@@ -11,19 +11,18 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"gorm.io/gorm"
 )
 
 type Compound3Handler struct {
-	compoundCometContract          Compound3 
-	cm            *cache.CacheManager
-	db             *gorm.DB
-	name           string
-	tokens         []trade.Token
-	parallelFactor int
+	compoundCometContract Compound3
+	cm                    *cache.CacheManager
+	db                    *gorm.DB
+	name                  string
+	tokens                []trade.Token
+	parallelFactor        int
 }
 
 func (h *Compound3Handler) ParallelFactor() int { return h.parallelFactor }
@@ -40,22 +39,21 @@ func NewCompound3Handler(
 		return nil, err
 	}
 	return &Compound3Handler{
-		compoundCometContract:           *compoundComet,
-		cm:            rdb,
-		name:           fmt.Sprintf("Compound3 on %s", instance.Address),
-		tokens:         tokens,
-		parallelFactor: parallelFactor,
+		compoundCometContract: *compoundComet,
+		cm:                    rdb,
+		name:                  fmt.Sprintf("Compound3 on %s", instance.Address),
+		tokens:                tokens,
+		parallelFactor:        parallelFactor,
 	}, nil
 }
 
-func(h *Compound3Handler) parseCompound3Events(chainId string, events []any) ([]trade.Compound3Event, error) {
-	chunkSize := len(events) / h.ParallelFactor()
-	if chunkSize == 0 {
+func (h *Compound3Handler) parseCompound3Events(chainId string, events []any) ([]trade.Compound3Event, error) {
+	if len(events) == 0 {
 		return []trade.Compound3Event{}, nil
 	}
-	eventChunks := lo.Chunk(events, chunkSize)
+	eventChunks := trade.Chunks(events, h.ParallelFactor())
 	var wg sync.WaitGroup
-	wg.Add(h.ParallelFactor())
+	wg.Add(len(eventChunks))
 	valuesCh := make(chan trade.Compound3Event, h.ParallelFactor())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer ctx.Done()
@@ -69,7 +67,7 @@ func(h *Compound3Handler) parseCompound3Events(chainId string, events []any) ([]
 				default:
 					switch generalEvent := generalEvent.(type) {
 					default:
-						slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
+						slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Events", h.Name(), generalEvent))
 					case CometSupply:
 						var event CometSupply = generalEvent
 						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
@@ -131,7 +129,7 @@ func(h *Compound3Handler) parseCompound3Events(chainId string, events []any) ([]
 						valuesCh <- item
 
 					case CometWithdraw:
-						var event CometWithdraw= generalEvent
+						var event CometWithdraw = generalEvent
 						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 						if err != nil {
 							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
@@ -155,12 +153,13 @@ func(h *Compound3Handler) parseCompound3Events(chainId string, events []any) ([]
 			}
 		}()
 	}
-	wg.Wait()
-	result := make([]trade.Compound3Event, len(events))
-	i := 0
+	// go func() {
+	// 	wg.Wait()
+	// 	close(valuesCh)
+	// }()
+	result := make([]trade.Compound3Event, 0, len(events))
 	for item := range valuesCh {
-		result[i] = item
-		i++
+		result = append(result, item)
 	}
 	cancel()
 	return result, nil

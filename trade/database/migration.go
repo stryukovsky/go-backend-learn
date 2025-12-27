@@ -15,6 +15,8 @@ func Migrate(db *gorm.DB) error {
 		&trade.Chain{},
 		&trade.AaveEvent{},
 		&trade.AaveInteraction{},
+		&trade.Compound3Event{},
+		&trade.Compound3Interaction{},
 		&trade.DeFiPlatform{},
 		&trade.UniswapV3Event{},
 		&trade.UniswapV3Deal{},

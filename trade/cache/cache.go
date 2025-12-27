@@ -52,8 +52,14 @@ func (cm *CacheManager) GetBasicClient() *ethclient.Client {
 }
 
 func (cm *CacheManager) GetReadonlyClient() *CacheEthJSONRPC {
-	result := trade.RandomChoice(cm.clients[1:])
-	return &result
+	if len(cm.clients) > 1 {
+		result := trade.RandomChoice(cm.clients[1:])
+		return &result
+	} else if len(cm.clients) == 1 {
+		return &cm.clients[0]
+	} else {
+		panic("No eth clients for cache client")
+	}
 }
 
 func (cm *CacheManager) Set(key string, value any) error {
