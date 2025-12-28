@@ -1,17 +1,14 @@
 package aave
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"math/big"
 	"strings"
-	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"gorm.io/gorm"
@@ -49,78 +46,56 @@ func NewAaveHandler(
 }
 
 func (h *AaveHandler) parseAaveEvents(chainId string, events []any) ([]trade.AaveEvent, error) {
-	chunkSize := len(events) / h.ParallelFactor()
-	if chunkSize == 0 {
-		return []trade.AaveEvent{}, nil
-	}
-	eventChunks := lo.Chunk(events, chunkSize)
-	var wg sync.WaitGroup
-	wg.Add(h.ParallelFactor())
-	valuesCh := make(chan trade.AaveEvent, h.ParallelFactor())
-	ctx, cancel := context.WithCancel(context.Background())
-	defer ctx.Done()
-	for i, chunk := range eventChunks {
-		go func() {
-			slog.Debug(fmt.Sprintf("[%s] Parsing %d-th chunk of Supply Events", h.Name(), i+1))
-			for _, generalEvent := range chunk {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					switch generalEvent := generalEvent.(type) {
-					default:
-						slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
-					case PoolSupply:
-						var event PoolSupply = generalEvent
-						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
-						if err != nil {
-							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
-							wg.Done()
-							cancel()
-						}
-						item := trade.NewAaveEvent(
-							chainId,
-							"supply",
-							event.OnBehalfOf,
-							event.Reserve,
-							event.Amount,
-							*timestamp,
-							event.Raw.TxHash.Hex(),
-							event.Raw.Index,
-						)
-						valuesCh <- item
-					case PoolWithdraw:
-						var event PoolWithdraw = generalEvent
-						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
-						if err != nil {
-							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
-							wg.Done()
-							cancel()
-						}
-						item := trade.NewAaveEvent(
-							chainId,
-							"withdraw",
-							event.To,
-							event.Reserve,
-							event.Amount,
-							*timestamp,
-							event.Raw.TxHash.Hex(),
-							event.Raw.Index,
-						)
-						valuesCh <- item
-					}
+	return trade.ParseEVMEvents(h.ParallelFactor(),
+		h.Name(),
+		chainId,
+		events,
+		func(task *trade.ParallelEVMParserTask[trade.AaveEvent],
+			generalEvent any,
+		) {
+			switch generalEvent := generalEvent.(type) {
+			default:
+				slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Supply Events", h.Name(), generalEvent))
+			case PoolSupply:
+				var event PoolSupply = generalEvent
+				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+				if err != nil {
+					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
+					task.Wg.Done()
+					task.Cancel()
 				}
-				wg.Done()
+				item := trade.NewAaveEvent(
+					chainId,
+					"supply",
+					event.OnBehalfOf,
+					event.Reserve,
+					event.Amount,
+					*timestamp,
+					event.Raw.TxHash.Hex(),
+					event.Raw.Index,
+				)
+				task.ValuesCh <- item
+			case PoolWithdraw:
+				var event PoolWithdraw = generalEvent
+				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+				if err != nil {
+					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
+					task.Wg.Done()
+					task.Cancel()
+				}
+				item := trade.NewAaveEvent(
+					chainId,
+					"withdraw",
+					event.To,
+					event.Reserve,
+					event.Amount,
+					*timestamp,
+					event.Raw.TxHash.Hex(),
+					event.Raw.Index,
+				)
+				task.ValuesCh <- item
 			}
-		}()
-	}
-	wg.Wait()
-	result := make([]trade.AaveEvent, 0, len(events))
-	for item := range valuesCh {
-		result = append(result, item)
-	}
-	cancel()
-	return result, nil
+		})
 }
 
 func (h *AaveHandler) FetchBlockchainInteractions(

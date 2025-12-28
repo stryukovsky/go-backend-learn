@@ -301,125 +301,92 @@ func (h *UniswapV3PoolHandler) parseEvents(
 		}
 	}
 
-	chunkSize := len(poolEvents) / h.ParallelFactor()
-	if chunkSize == 0 {
-		return []trade.UniswapV3Event{}, nil
-	}
-	chunks := lo.Chunk(poolEvents, chunkSize)
-	chunksCount := len(chunks)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var wg sync.WaitGroup
-	wg.Add(chunksCount)
-	resultCh := make(chan trade.UniswapV3Event, h.ParallelFactor())
-	for i, chunk := range chunks {
-		go func() {
-			slog.Debug(fmt.Sprintf("[%s] Starting %d worker", h.Name(), i))
-			defer wg.Done()
-			for _, uncastedEvent := range chunk {
-				select {
-				case <-ctx.Done():
+	return trade.ParseEVMEvents(h.ParallelFactor(),
+		h.Name(),
+		h.chainId,
+		poolEvents,
+		func(task *trade.ParallelEVMParserTask[trade.UniswapV3Event],
+			uncastedEvent any,
+		) {
+			switch castedEvent := uncastedEvent.(type) {
+			case UniswapV3PoolMint:
+				parsedEvent, err := h.parseMint(castedEvent)
+				if err != nil {
+					task.Cancel()
 					return
-				default:
-					switch castedEvent := uncastedEvent.(type) {
-					case UniswapV3PoolMint:
-						parsedEvent, err := h.parseMint(castedEvent)
-						if err != nil {
-							cancel()
-							return
+				} else {
+					liquidityIdentity := NewLiquidityActionIdentity(castedEvent.Amount, castedEvent.Amount0, castedEvent.Amount1)
+					if tokenId, ok := liquidityAdded[liquidityIdentity]; ok {
+						if walletAddress, ok := actualWalletsMintedLiquidity[tokenId]; ok {
+							slog.Info(fmt.Sprintf(
+								"[%s] Wallet %s has minted token %s which corresponds to liquidity event being parsed",
+								h.Name(),
+								walletAddress.Hex(),
+								tokenId,
+							))
+							parsedEvent.WalletAddress = walletAddress.Hex()
+							parsedEvent.PositionTokenId = tokenId
 						} else {
-							liquidityIdentity := NewLiquidityActionIdentity(castedEvent.Amount, castedEvent.Amount0, castedEvent.Amount1)
-							if tokenId, ok := liquidityAdded[liquidityIdentity]; ok {
-								if walletAddress, ok := actualWalletsMintedLiquidity[tokenId]; ok {
-									slog.Info(fmt.Sprintf(
-										"[%s] Wallet %s has minted token %s which corresponds to liquidity event being parsed",
-										h.Name(),
-										walletAddress.Hex(),
-										tokenId,
-									))
-									parsedEvent.WalletAddress = walletAddress.Hex()
-									parsedEvent.PositionTokenId = tokenId
-								} else {
-									slog.Warn(fmt.Sprintf(
-										"[%s] Token with tokenId %s found, but no wallet holding it found", h.Name(), tokenId))
-								}
-							} else {
-								slog.Warn(fmt.Sprintf("[%s] liquidity minted, but no token ID found", h.Name()))
-							}
-							resultCh <- *parsedEvent
+							slog.Warn(fmt.Sprintf(
+								"[%s] Token with tokenId %s found, but no wallet holding it found", h.Name(), tokenId))
 						}
-					case UniswapV3PoolBurn:
-						parsedEvent, err := h.parseBurn(castedEvent)
-						if err != nil {
-							cancel()
-							return
-						} else {
-							liquidityIdentity := NewLiquidityActionIdentity(castedEvent.Amount, castedEvent.Amount0, castedEvent.Amount1)
-							if tokenId, ok := liquidityRemoved[liquidityIdentity]; ok {
-								if walletAddress, ok := actualWalletsBurnedLiquidity[tokenId]; ok {
-									slog.Info(fmt.Sprintf(
-										"Wallet %s has burned token %s which corresponds to liquidity event being parsed",
-										walletAddress.Hex(),
-										tokenId,
-									))
-									parsedEvent.WalletAddress = walletAddress.Hex()
-									parsedEvent.PositionTokenId = tokenId
-								}
-							}
-							resultCh <- *parsedEvent
-						}
-					case UniswapV3PoolSwap:
-						parsedEvent, err := h.parseSwap(castedEvent)
-						if err != nil {
-							cancel()
-							return
-						} else {
-							resultCh <- *parsedEvent
-						}
-					case UniswapV3PoolCollect:
-						parsedEvent, err := h.parseCollect(castedEvent)
-						if err != nil {
-							cancel()
-							return
-						} else {
-							liquidityIdentity := NewLiquidityActionIdentity(big.NewInt(0), castedEvent.Amount0, castedEvent.Amount1)
-							if tokenId, ok := feesCollected[liquidityIdentity]; ok {
-								if walletAddress, ok := actualWalletsBurnedLiquidity[tokenId]; ok {
-									slog.Info(fmt.Sprintf(
-										"Wallet %s has collected fees on liquidity token %s which corresponds to liquidity event being parsed",
-										walletAddress.Hex(),
-										tokenId,
-									))
-									parsedEvent.WalletAddress = walletAddress.Hex()
-									parsedEvent.PositionTokenId = tokenId
-								}
-							}
-							resultCh <- *parsedEvent
-						}
-					default:
-						slog.Info(fmt.Sprintf("[%s] Skip event of type %s since no parsing implemented for it", h.Name(), uncastedEvent))
-						continue
+					} else {
+						slog.Warn(fmt.Sprintf("[%s] liquidity minted, but no token ID found", h.Name()))
 					}
+					task.ValuesCh <- *parsedEvent
 				}
+			case UniswapV3PoolBurn:
+				parsedEvent, err := h.parseBurn(castedEvent)
+				if err != nil {
+					task.Cancel()
+					return
+				} else {
+					liquidityIdentity := NewLiquidityActionIdentity(castedEvent.Amount, castedEvent.Amount0, castedEvent.Amount1)
+					if tokenId, ok := liquidityRemoved[liquidityIdentity]; ok {
+						if walletAddress, ok := actualWalletsBurnedLiquidity[tokenId]; ok {
+							slog.Info(fmt.Sprintf(
+								"Wallet %s has burned token %s which corresponds to liquidity event being parsed",
+								walletAddress.Hex(),
+								tokenId,
+							))
+							parsedEvent.WalletAddress = walletAddress.Hex()
+							parsedEvent.PositionTokenId = tokenId
+						}
+					}
+					task.ValuesCh <- *parsedEvent
+				}
+			case UniswapV3PoolSwap:
+				parsedEvent, err := h.parseSwap(castedEvent)
+				if err != nil {
+					task.Cancel()
+					return
+				} else {
+					task.ValuesCh <- *parsedEvent
+				}
+			case UniswapV3PoolCollect:
+				parsedEvent, err := h.parseCollect(castedEvent)
+				if err != nil {
+					task.Cancel()
+					return
+				} else {
+					liquidityIdentity := NewLiquidityActionIdentity(big.NewInt(0), castedEvent.Amount0, castedEvent.Amount1)
+					if tokenId, ok := feesCollected[liquidityIdentity]; ok {
+						if walletAddress, ok := actualWalletsBurnedLiquidity[tokenId]; ok {
+							slog.Info(fmt.Sprintf(
+								"Wallet %s has collected fees on liquidity token %s which corresponds to liquidity event being parsed",
+								walletAddress.Hex(),
+								tokenId,
+							))
+							parsedEvent.WalletAddress = walletAddress.Hex()
+							parsedEvent.PositionTokenId = tokenId
+						}
+					}
+					task.ValuesCh <- *parsedEvent
+				}
+			default:
+				slog.Info(fmt.Sprintf("[%s] Skip event of type %s since no parsing implemented for it", h.Name(), uncastedEvent))
 			}
-			slog.Debug(fmt.Sprintf("[%s] %d worker finished parsing events", h.Name(), i))
-		}()
-	}
-	results := make([]trade.UniswapV3Event, 0, len(poolEvents))
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-	for item := range resultCh {
-		select {
-		case <-ctx.Done():
-			return []trade.UniswapV3Event{}, errors.New("Some worker goroutine encountered error. Details in logs")
-		default:
-			results = append(results, item)
-		}
-	}
-	return results, nil
+		})
 }
 
 func (h *UniswapV3PoolHandler) fetchPoolLiquidityEvents(fromBlock uint64, toBlock uint64) ([]any, error) {

@@ -1,12 +1,10 @@
 package compound3
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"math/big"
 	"strings"
-	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -45,124 +43,6 @@ func NewCompound3Handler(
 		tokens:                tokens,
 		parallelFactor:        parallelFactor,
 	}, nil
-}
-
-func (h *Compound3Handler) parseCompound3Events(chainId string, events []any) ([]trade.Compound3Event, error) {
-	if len(events) == 0 {
-		return []trade.Compound3Event{}, nil
-	}
-	eventChunks := trade.Chunks(events, h.ParallelFactor())
-	var wg sync.WaitGroup
-	wg.Add(len(eventChunks))
-	valuesCh := make(chan trade.Compound3Event, h.ParallelFactor())
-	ctx, cancel := context.WithCancel(context.Background())
-	defer ctx.Done()
-	for i, chunk := range eventChunks {
-		go func() {
-			slog.Debug(fmt.Sprintf("[%s] Parsing %d-th chunk of Supply Events", h.Name(), i+1))
-			for _, generalEvent := range chunk {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					switch generalEvent := generalEvent.(type) {
-					default:
-						slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Events", h.Name(), generalEvent))
-					case CometSupply:
-						var event CometSupply = generalEvent
-						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
-						if err != nil {
-							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
-							wg.Done()
-							cancel()
-						}
-						item := trade.NewCompound3Event(
-							chainId,
-							"supply",
-							event.Dst,
-							h.compoundCometContract.MainAsset,
-							event.Amount,
-							*timestamp,
-							event.Raw.TxHash.Hex(),
-							event.Raw.Index,
-						)
-						valuesCh <- item
-
-					case CometSupplyCollateral:
-						var event CometSupplyCollateral = generalEvent
-						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
-						if err != nil {
-							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
-							wg.Done()
-							cancel()
-						}
-						item := trade.NewCompound3Event(
-							chainId,
-							"supply",
-							event.Dst,
-							event.Asset,
-							event.Amount,
-							*timestamp,
-							event.Raw.TxHash.Hex(),
-							event.Raw.Index,
-						)
-						valuesCh <- item
-
-					case CometWithdrawCollateral:
-						var event CometWithdrawCollateral = generalEvent
-						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
-						if err != nil {
-							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
-							wg.Done()
-							cancel()
-						}
-						item := trade.NewCompound3Event(
-							chainId,
-							"withdraw",
-							event.To,
-							event.Asset,
-							event.Amount,
-							*timestamp,
-							event.Raw.TxHash.Hex(),
-							event.Raw.Index,
-						)
-						valuesCh <- item
-
-					case CometWithdraw:
-						var event CometWithdraw = generalEvent
-						timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
-						if err != nil {
-							slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
-							wg.Done()
-							cancel()
-						}
-						item := trade.NewCompound3Event(
-							chainId,
-							"withdraw",
-							event.To,
-							h.compoundCometContract.MainAsset,
-							event.Amount,
-							*timestamp,
-							event.Raw.TxHash.Hex(),
-							event.Raw.Index,
-						)
-						valuesCh <- item
-					}
-				}
-				wg.Done()
-			}
-		}()
-	}
-	// go func() {
-	// 	wg.Wait()
-	// 	close(valuesCh)
-	// }()
-	result := make([]trade.Compound3Event, 0, len(events))
-	for item := range valuesCh {
-		result = append(result, item)
-	}
-	cancel()
-	return result, nil
 }
 
 func (h *Compound3Handler) FetchBlockchainInteractions(
@@ -243,11 +123,94 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 	} else {
 		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
 	}
-	events, err := h.parseCompound3Events(chainId, eventsRaw)
-	if err != nil {
-		return nil, err
-	}
-	return events, nil
+
+	return trade.ParseEVMEvents(
+		h.ParallelFactor(),
+		h.Name(), chainId, eventsRaw, func(task *trade.ParallelEVMParserTask[trade.Compound3Event], generalEvent any) {
+			switch generalEvent := generalEvent.(type) {
+			default:
+				slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Events", h.Name(), generalEvent))
+			case CometSupply:
+				var event CometSupply = generalEvent
+				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+				if err != nil {
+					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
+					task.Wg.Done()
+					task.Cancel()
+				}
+				item := trade.NewCompound3Event(
+					chainId,
+					"supply",
+					event.Dst,
+					h.compoundCometContract.MainAsset,
+					event.Amount,
+					*timestamp,
+					event.Raw.TxHash.Hex(),
+					event.Raw.Index,
+				)
+				task.ValuesCh <- item
+
+			case CometSupplyCollateral:
+				var event CometSupplyCollateral = generalEvent
+				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+				if err != nil {
+					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
+					task.Wg.Done()
+					task.Cancel()
+				}
+				item := trade.NewCompound3Event(
+					chainId,
+					"supply",
+					event.Dst,
+					event.Asset,
+					event.Amount,
+					*timestamp,
+					event.Raw.TxHash.Hex(),
+					event.Raw.Index,
+				)
+				task.ValuesCh <- item
+
+			case CometWithdrawCollateral:
+				var event CometWithdrawCollateral = generalEvent
+				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+				if err != nil {
+					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
+					task.Wg.Done()
+					task.Cancel()
+				}
+				item := trade.NewCompound3Event(
+					chainId,
+					"withdraw",
+					event.To,
+					event.Asset,
+					event.Amount,
+					*timestamp,
+					event.Raw.TxHash.Hex(),
+					event.Raw.Index,
+				)
+				task.ValuesCh <- item
+
+			case CometWithdraw:
+				var event CometWithdraw = generalEvent
+				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
+				if err != nil {
+					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
+					task.Wg.Done()
+					task.Cancel()
+				}
+				item := trade.NewCompound3Event(
+					chainId,
+					"withdraw",
+					event.To,
+					h.compoundCometContract.MainAsset,
+					event.Amount,
+					*timestamp,
+					event.Raw.TxHash.Hex(),
+					event.Raw.Index,
+				)
+				task.ValuesCh <- item
+			}
+		})
 }
 
 func (h *Compound3Handler) PopulateWithFinanceInfo(interactions []trade.Compound3Event) ([]trade.Compound3Interaction, error) {

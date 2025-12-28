@@ -323,6 +323,7 @@ type Chain struct {
 	ChainId string `json:"ChainId" binding:"required" gorm:"uniqueIndex"`
 }
 
+// TODO: Block from DBInt to uint64
 type ERC20Transfer struct {
 	gorm.Model
 	TokenAddress string    `json:"tokenAddress" binding:"required"`
@@ -341,7 +342,7 @@ func NewERC20Transfer(
 	sender string,
 	recipient string,
 	amount *big.Int,
-	block *big.Int,
+	block uint64,
 	chainId string,
 	timestamp *time.Time,
 	txId string,
@@ -352,7 +353,7 @@ func NewERC20Transfer(
 		Sender:       sender,
 		Recipient:    recipient,
 		Amount:       DBInt{amount},
-		Block:        DBInt{block},
+		Block:        DBInt{big.NewInt(int64(block))},
 		ChainId:      chainId,
 		Timestamp:    *timestamp,
 		TxId:         txId,

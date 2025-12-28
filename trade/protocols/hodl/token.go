@@ -11,12 +11,14 @@ import (
 )
 
 type ERC20 struct {
-	client *ethclient.Client
-	caller *IERC20Caller
-	Info   trade.Token
+	client   *ethclient.Client
+	caller   *IERC20Caller
+	filterer *IERC20Filterer
+	Info     trade.Token
 }
 
-func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) { balance, err := token.caller.BalanceOf(&bind.CallOpts{}, common.HexToAddress(recipient))
+func (token *ERC20) BalanceOf(recipient string) (*big.Int, error) {
+	balance, err := token.caller.BalanceOf(&bind.CallOpts{}, common.HexToAddress(recipient))
 	if err != nil {
 		return nil, err
 	}
@@ -36,5 +38,10 @@ func NewERC20(client *ethclient.Client, token trade.Token) (*ERC20, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ERC20{client: client, caller: caller, Info: token}, nil
+
+	filterer, err := NewIERC20Filterer(common.HexToAddress(token.Address), client)
+	if err != nil {
+		return nil, err
+	}
+	return &ERC20{client: client, caller: caller, filterer: filterer, Info: token}, nil
 }
