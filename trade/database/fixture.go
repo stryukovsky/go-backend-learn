@@ -9,7 +9,7 @@ import (
 )
 
 func Fixture(db *gorm.DB) {
-	url := "http://localhost:8545"
+	url := "https://eth-mainnet.public.blastapi.io"
 	blockchainUrls := make(pq.StringArray, 1)
 	blockchainUrls[0] = url
 
@@ -18,7 +18,7 @@ func Fixture(db *gorm.DB) {
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x8EB8a3b98659Cce290402893d0123abb75E3ab28", LastBlock: 23152597})
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x49ecd0F2De4868E5130fdC2C45D4d97444B7c269", LastBlock: 23495633})
 	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af", LastBlock: 23153501})
-
+	db.Create(&trade.TrackedWallet{ChainId: "1", Address: "0xa1EF1AF5934b2b9771075cC14fF38368Da630409", LastBlock: 24105400})
 	db.Create(
 		&trade.Token{
 			ChainId:  "1",
@@ -67,6 +67,13 @@ func Fixture(db *gorm.DB) {
 			Address:  "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
 			Symbol:   "UNI",
 			Decimals: trade.NewDBInt(big.NewInt(18)),
+		})
+	db.Create(
+		&trade.Token{
+			ChainId:  "1",
+			Address:  "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+			Symbol:   "BTC",
+			Decimals: trade.NewDBInt(big.NewInt(8)),
 		})
 	db.Create(&trade.Chain{Name: "Ethereum mainnet", ChainId: "1"})
 	db.Create(&trade.DeFiPlatform{Type: trade.Aave, ChainId: "1", Address: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"})

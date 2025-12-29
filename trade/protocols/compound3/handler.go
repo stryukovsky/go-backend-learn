@@ -160,7 +160,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 				}
 				item := trade.NewCompound3Event(
 					chainId,
-					"supply",
+					"supply_collateral",
 					event.Dst,
 					event.Asset,
 					event.Amount,
@@ -180,7 +180,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 				}
 				item := trade.NewCompound3Event(
 					chainId,
-					"withdraw",
+					"withdraw_collateral",
 					event.To,
 					event.Asset,
 					event.Amount,
@@ -214,8 +214,8 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 }
 
 func (h *Compound3Handler) PopulateWithFinanceInfo(interactions []trade.Compound3Event) ([]trade.Compound3Interaction, error) {
-	result := make([]trade.Compound3Interaction, len(interactions))
-	for i, interaction := range interactions {
+	result := make([]trade.Compound3Interaction, 0, len(interactions))
+	for _, interaction := range interactions {
 		tokenAddress := common.HexToAddress(interaction.TokenAddress)
 		token := trade.Token{}
 		for _, t := range h.tokens {
@@ -225,7 +225,7 @@ func (h *Compound3Handler) PopulateWithFinanceInfo(interactions []trade.Compound
 		}
 
 		if len(token.Address) == 0 {
-			slog.Warn(fmt.Sprintf("Found aave interaction with unknown token address %s", tokenAddress))
+			slog.Warn(fmt.Sprintf("Found compound interaction with unknown token address %s", tokenAddress))
 			continue
 		}
 
@@ -245,7 +245,7 @@ func (h *Compound3Handler) PopulateWithFinanceInfo(interactions []trade.Compound
 			VolumeUSD:       trade.NewDBNumeric(volumeUSD),
 			BlockchainEvent: interaction,
 		}
-		result[i] = deal
+		result = append(result, deal)
 	}
 	return result, nil
 }

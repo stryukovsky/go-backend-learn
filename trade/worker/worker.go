@@ -266,11 +266,6 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		}
 
 		if err == nil {
-			// err = tx.Commit().Error
-			// if err != nil {
-			// 	panic(err)
-			// }
-
 			for i := range trackedWallets {
 				trackedWallets[i].LastBlock = endBlock
 			}
