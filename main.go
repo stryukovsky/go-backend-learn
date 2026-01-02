@@ -75,7 +75,9 @@ func main() {
 				Name:  "load",
 				Usage: "Load fixture to database",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					database.Fixture(db)
+					database.Arbitrum(db)
+					database.Base(db)
+					database.Binance(db)
 					return nil
 				},
 			},
