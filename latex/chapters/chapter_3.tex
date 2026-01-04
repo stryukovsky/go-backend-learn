@@ -14,8 +14,18 @@
 	\label{eq:arbitrage_problem_general}
 \end{equation}
 
-Где $(\delta; \lambda) \in T(\mathbf{R})$ -- валидная сделка из торгового множества для текущего состояния пула $\mathbf{R}$
+Где $(\delta; \lambda) \in T(\mathbf{R})$ -- валидная сделка из торгового множества для текущего состояния пула $\mathbf{R}$.  
+Можно иначе выразить, через $\mathbf{R}$ и $\mathbf{R'}$, где $\mathbf{R'}$ -- состояние пула после одной сделки $(\delta; \lambda) \in T(R)$: 
 
+\begin{equation}
+\max{\mathbf{c} \cdot (\mathbf{R} - \mathbf{R'})}
+	\label{eq:arbitrage_problem_general_via_states}
+\end{equation}
+
+Почему такое выражение возможно? $\mathbf{R'} = \mathbf{R} + \delta - \lambda$, т.к. когда сделка проходит, из пула изымается $\lambda$ токенов и добавляется $\delta$ токенов.  
+Если выразить $\delta - \lambda = \mathbf{R'} - \mathbf{R}$, а затем поменять знаки, получим, что $\lambda - \delta = \mathbf{R} - \mathbf{R'}$, т.е. вместо $\lambda - \delta$ можно подставить $\mathbf{R} - \mathbf{R'}$ и наоборот. 
+
+\section{Задача арбитража в UniswapV3}
 Для UniswapV3 можно сформулировать задачу арбитража следующим образом:
 
 \begin{equation}
