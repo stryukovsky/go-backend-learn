@@ -75,9 +75,10 @@ func main() {
 				Name:  "load",
 				Usage: "Load fixture to database",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					database.Arbitrum(db)
-					database.Base(db)
-					database.Binance(db)
+					// database.Wallets(db)
+					// database.Arbitrum(db)
+					// database.Base(db)
+					// database.Binance(db)
 					return nil
 				},
 			},
@@ -97,8 +98,9 @@ func main() {
 					if err != nil {
 						panic("Cannot instantiate cache manager " + err.Error())
 					}
-					worker.Cycle(db, cm, 1)
-					return nil
+					for {
+						worker.Cycle(db, cm, 1)
+					}
 				},
 			},
 			{

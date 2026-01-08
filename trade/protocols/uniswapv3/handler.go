@@ -12,10 +12,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/samber/lo"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
+	"github.com/stryukovsky/go-backend-learn/trade/web3client"
 	"gorm.io/gorm"
 )
 
@@ -35,7 +35,7 @@ func (h *UniswapV3PoolHandler) ParallelFactor() int { return h.parallelFactor }
 
 func NewUniswapV3PoolHandler(
 	instance trade.DeFiPlatform,
-	client *ethclient.Client,
+	client *web3client.MultiURLClient,
 	cm *cache.CacheManager,
 	db *gorm.DB,
 	parallelFactor int,

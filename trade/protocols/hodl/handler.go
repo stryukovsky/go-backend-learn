@@ -7,9 +7,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
+	"github.com/stryukovsky/go-backend-learn/trade/web3client"
 )
 
 type HODLHandler struct {
@@ -18,7 +18,7 @@ type HODLHandler struct {
 	parallelFactor int
 }
 
-func NewHODLHandler(client *ethclient.Client, token trade.Token, cm *cache.CacheManager, parallelFactor int) (*HODLHandler, error) {
+func NewHODLHandler(client *web3client.MultiURLClient, token trade.Token, cm *cache.CacheManager, parallelFactor int) (*HODLHandler, error) {
 	erc20, err := NewERC20(client, token)
 	if err != nil {
 		return nil, err

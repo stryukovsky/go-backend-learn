@@ -1,13 +1,11 @@
 package worker
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"math"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
@@ -16,6 +14,7 @@ import (
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/compound3"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/hodl"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/uniswapv3"
+	"github.com/stryukovsky/go-backend-learn/trade/web3client"
 	"gorm.io/gorm"
 )
 
@@ -94,13 +93,13 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		return
 	}
 
-	client, err := ethclient.Dial(config.BlockchainUrls[0])
+	client, err := web3client.NewMultiURLClient(config.BlockchainUrls)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Failed to connect to Ethereum node: %s", err.Error()))
 		return
 	}
 
-	chainId, err := client.ChainID(context.Background())
+	chainId, err := client.ChainID()
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot fetch chain id: %s", err.Error()))
 		return
@@ -113,7 +112,7 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		return
 	}
 
-	currentBlockchainBlock, err := client.BlockNumber(context.Background())
+	currentBlockchainBlock, err := client.BlockNumber()
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %s", err.Error()))
 		return

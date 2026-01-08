@@ -8,9 +8,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
+	"github.com/stryukovsky/go-backend-learn/trade/web3client"
 	"gorm.io/gorm"
 )
 
@@ -27,7 +27,7 @@ func (h *AaveHandler) ParallelFactor() int { return h.parallelFactor }
 
 func NewAaveHandler(
 	instance trade.DeFiPlatform,
-	client *ethclient.Client,
+	client *web3client.MultiURLClient,
 	rdb *cache.CacheManager,
 	tokens []trade.Token,
 	parallelFactor int,

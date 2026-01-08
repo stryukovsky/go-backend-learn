@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols/uniswapv3"
+	"github.com/stryukovsky/go-backend-learn/trade/web3client"
 	"gorm.io/gorm"
 )
 
@@ -94,9 +94,13 @@ func Analyze(blocksCount uint64, db *gorm.DB, cm *cache.CacheManager) {
 	startBlock := config.LastBlock
 	currentBlock := startBlock
 
-	basicClient := cm.GetBasicClient()
+	client, err := web3client.NewMultiURLClient(config.BlockchainUrls)
+	if err != nil {
+		slog.Error(fmt.Sprintf("Failed to connect to Ethereum node: %s", err.Error()))
+		return
+	}
 
-	chainId, err := basicClient.ChainID(context.Background())
+	chainId, err := client.ChainID()
 	if err != nil {
 		slog.Warn(fmt.Sprintf("Cannot fetch chain id: %s", err.Error()))
 		return
@@ -116,7 +120,7 @@ func Analyze(blocksCount uint64, db *gorm.DB, cm *cache.CacheManager) {
 	for _, uv3pool := range uniswapV3Pools {
 		uniswapv3Handler, err := uniswapv3.NewUniswapV3PoolHandler(
 			uv3pool,
-			cm.GetBasicClient(),
+			client,
 			cm,
 			db,
 			ParallelFactor,
@@ -131,7 +135,7 @@ func Analyze(blocksCount uint64, db *gorm.DB, cm *cache.CacheManager) {
 	}
 
 	for {
-		lastBlockInBlockchain, err := basicClient.BlockNumber(context.Background())
+		lastBlockInBlockchain, err := client.BlockNumber()
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot get last blockchain block: %s", err.Error()))
 			return

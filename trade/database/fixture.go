@@ -13,6 +13,14 @@ import (
 )
 
 func Arbitrum(db *gorm.DB) {
+	blockchainUrls := make(pq.StringArray, 5)
+	blockchainUrls[0] = "https://1rpc.io/arb"
+	blockchainUrls[1] = "https://api.zan.top/arb-one"
+	blockchainUrls[2] = "https://arbitrum.api.onfinality.io/public"
+	blockchainUrls[3] = "https://arbitrum.drpc.org"
+	blockchainUrls[4] = "https://arbitrum.gateway.tenderly.co"
+
+	db.Create(&trade.Worker{BlockchainUrls: blockchainUrls, BlocksInterval: 1000})
 	// Arbitrum Chain ID is 42161
 	db.Create(
 		&trade.Token{
@@ -28,8 +36,8 @@ func Arbitrum(db *gorm.DB) {
 			Symbol:   "WETH",
 			Decimals: trade.NewDBInt(big.NewInt(18)),
 		})
-	// Note: No direct EUR stablecoin equivalent found on Arbitrum
 	db.Create(
+		// Note: No direct EUR stablecoin equivalent found on Arbitrum
 		&trade.Token{
 			ChainId:  "42161",
 			Address:  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
@@ -353,53 +361,4 @@ func Ethereum(db *gorm.DB) {
 		Address:               "0x9e7809c21ba130c1a51c112928ea6474d9a9ae3c",
 		ExtraContractAddress1: nonFungiblePositionsManager,
 	})
-
-	// Alternative: BNB/WETH - 0.3% fee (lower liquidity)
-	// Only use if you need lower fee tier despite lower liquidity
-	// db.Create(&trade.DeFiPlatform{
-	// 	Type:                  trade.UniswapV3,
-	// 	ChainId:               "1",
-	// 	Address:               "0x881b8d0b1ad9d1b1db918342b064d10afb9eaa69",
-	// 	ExtraContractAddress1: nonFungiblePositionsManager,
-	// })
-
-	// ========================================
-	// CROSS-STABLECOIN PAIRS TO CONSIDER
-	// ========================================
-
-	// USDC/USDT already covered above with 0.01% fee
-
-	// For EURC pairs with USDT, you should query the Uniswap V3 Factory:
-	// factory.getPool(token0, token1, fee)
-	// Address: 0x1F98431c8aD98523631AE4a59f267346ea31F984
-	//
-	// Example fees to try:
-	// - 100 (0.01%) for tight stablecoin pairs
-	// - 500 (0.05%) for correlated pairs
-	//
-	// Token addresses for reference:
-	// USDT:  0xdAC17F958D2ee523a2206206994597C13D831ec7
-	// USDC:  0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
-	// EURC:  0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c
-	// WETH:  0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
-	// BNB:   0xB8c77482e45F1F44dE1745F52C74426C631bDD52
-	// LINK:  0x514910771AF9Ca656af840dff83E8264EcF986CA
-	// UNI:   0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
-
-	// ========================================
-	// ADDITIONAL PAIRS YOU MAY WANT
-	// ========================================
-
-	// LINK/USDC, LINK/USDT, UNI/USDC, UNI/USDT, BNB/USDC, BNB/USDT
-	// These can be found by querying the factory contract
-	// Most will likely use 0.3% fee tier (3000 basis points)
-	//
-	// To find them programmatically, use:
-	// web3.Call(factoryContract, "getPool", [token0Address, token1Address, feeAmount])
-	//
-	// Where feeAmount is typically:
-	// - 100 for tight stablecoin pairs (0.01%)
-	// - 500 for correlated assets (0.05%)
-	// - 3000 for standard pairs (0.3%)
-	// - 10000 for exotic pairs (1%)
 }

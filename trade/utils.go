@@ -81,3 +81,39 @@ func ParseEVMEvents[RawEvent, ParsedEvent any](
 	cancel()
 	return result, nil
 }
+
+type WithURL interface {
+	URL() string
+}
+
+func RetryEthCall[CallerPtr WithURL, R any](listCallers func() []CallerPtr, call func(CallerPtr) (R, error)) (R, error) {
+	callers := listCallers()
+	 var zero R
+	if len(callers) == 0 {
+		return zero, fmt.Errorf("No callers provided")
+	}
+	// firstly attempt random client
+
+	firstAttemptCaller := RandomChoice(callers)
+	result, err := call(firstAttemptCaller)
+	if err == nil {
+		// skip any next attempts of calling
+		return result, err
+	}
+	for _, client := range callers {
+		r, e := call(client)
+		result = r
+		err = e
+		if e != nil {
+			slog.Warn(fmt.Sprintf("Client with url %s failed to get  %s", client.URL(), err.Error()))
+		} else {
+			err = nil
+			// finally get value; leave the cycle
+			break
+		}
+	}
+	if err != nil {
+		return zero, fmt.Errorf("All clients could not perform call")
+	}
+	return result, nil
+}
