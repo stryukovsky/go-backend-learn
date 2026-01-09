@@ -65,7 +65,7 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 		return []trade.ERC20Transfer{}, nil
 	}
 	slog.Info(fmt.Sprintf("Scanned %d transfers", len(allTransfers)))
-	return trade.ParseEVMEvents(h.parallelFactor, h.token.Info.Symbol, chainId, allTransfers, func(task *trade.ParallelEVMParserTask[trade.ERC20Transfer], event IERC20Transfer) {
+	return trade.ParseEVMEvents(h.parallelFactor, h.token.Info.Symbol, chainId, allTransfers, func(task trade.ParallelEVMParserTask[trade.ERC20Transfer], event IERC20Transfer) error {
 		sender := event.From
 		recipient := event.To
 		amount := event.Value
@@ -74,10 +74,11 @@ func (h *HODLHandler) FetchBlockchainInteractions(
 		timestamp, err := h.cm.GetCachedBlockTimestamp(block)
 		if err != nil {
 			slog.Warn(fmt.Sprintf("Cannot fetch from cache or blockchain info on block %d timestamp: %s", block, err.Error()))
-		} else {
-			transfer := trade.NewERC20Transfer(h.token.Info.Address, sender.String(), recipient.String(), amount, block, chainId, timestamp, txId.Hex(), event.Raw.Index)
-			task.ValuesCh <- transfer
+			return err
 		}
+		transfer := trade.NewERC20Transfer(h.token.Info.Address, sender.String(), recipient.String(), amount, block, chainId, timestamp, txId.Hex(), event.Raw.Index)
+		task.ValuesCh <- transfer
+		return nil
 	},
 	)
 }

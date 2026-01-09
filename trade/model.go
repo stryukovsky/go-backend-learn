@@ -363,8 +363,9 @@ func NewERC20Transfer(
 
 type Worker struct {
 	gorm.Model
-	BlockchainUrls pq.StringArray `json:"blockchainUrl" binding:"required" gorm:"type:text[]"`
-	BlocksInterval uint64         `json:"blocksInterval" binding:"required"`
+	BlockchainUrlsForCacheManager pq.StringArray `json:"blockchainUrlsForCacheManager" binding:"required" gorm:"type:text[]"`
+	BlockchainUrlsForEvents       pq.StringArray `json:"blockchainUrlsForEvents" binding:"required" gorm:"type:text[]"`
+	BlocksInterval                uint64         `json:"blocksInterval" binding:"required"`
 }
 
 type AnalyticsWorker struct {

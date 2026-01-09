@@ -36,7 +36,7 @@ func instantiateCache(db *gorm.DB) (*cache.CacheManager, error) {
 	if result.Error != nil {
 		return nil, fmt.Errorf("No config")
 	}
-	return cache.NewCacheManager(config.BlockchainUrls, "localhost:6379", "redis", 0)
+	return cache.NewCacheManager(config.BlockchainUrlsForCacheManager, "localhost:6379", "redis", 0)
 }
 
 func main() {
@@ -76,7 +76,7 @@ func main() {
 				Usage: "Load fixture to database",
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					// database.Wallets(db)
-					// database.Arbitrum(db)
+					database.Arbitrum(db)
 					// database.Base(db)
 					// database.Binance(db)
 					return nil
@@ -100,6 +100,7 @@ func main() {
 					}
 					for {
 						worker.Cycle(db, cm, 1)
+						time.Sleep(5 * time.Second)
 					}
 				},
 			},

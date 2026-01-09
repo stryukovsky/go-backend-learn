@@ -6,7 +6,6 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stryukovsky/go-backend-learn/trade"
 	"github.com/stryukovsky/go-backend-learn/trade/cache"
 	"github.com/stryukovsky/go-backend-learn/trade/protocols"
@@ -22,67 +21,6 @@ const (
 	ParallelFactor = 16
 )
 
-func fetchInteractionsFromEthJSONRPC[A any, B any](
-	chainId string,
-	db *gorm.DB,
-	startBlock uint64,
-	endBlock uint64,
-	handlers []protocols.DeFiProtocolHandler[A, B],
-	participants []string,
-) error {
-	for _, handler := range handlers {
-		blockchainInteractions, err := handler.FetchBlockchainInteractions(
-			chainId,
-			participants,
-			startBlock,
-			endBlock,
-		)
-		if len(blockchainInteractions) > 0 {
-			for _, blockchainInteraction := range blockchainInteractions {
-				err = db.Create(&blockchainInteraction).Error
-				if err != nil {
-					slog.Warn(fmt.Sprintf("[%s] Cannot save blockchain interaction: %s", handler.Name(), err.Error()))
-					if _, ok := err.(*pgconn.PgError); ok {
-						// ignore error if duplicate
-						err = nil
-					} else {
-						return err
-					}
-				}
-			}
-		}
-		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot fetch blockchain interactions: %s", handler.Name(), err.Error()))
-			return err
-		}
-		if len(blockchainInteractions) == 0 {
-			slog.Warn(fmt.Sprintf("[%s] No blockchain interactions found", handler.Name()))
-			continue
-		}
-		slog.Info(fmt.Sprintf(
-			"[%s] Found %d blockchain interactions where tracked wallets participated",
-			handler.Name(),
-			len(blockchainInteractions)))
-		financialInteractions, err := handler.PopulateWithFinanceInfo(blockchainInteractions)
-		if err != nil {
-			slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
-			return err
-		}
-		for _, financialInteraction := range financialInteractions {
-			err = db.Create(&financialInteraction).Error
-			if err != nil {
-				slog.Warn(fmt.Sprintf("[%s] Cannot save financial interaction: %s", handler.Name(), err.Error()))
-				if _, ok := err.(*pgconn.PgError); ok {
-					// ignore error if duplicate
-					err = nil
-				} else {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
 
 func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 	slog.Info("Starting worker")
@@ -93,7 +31,7 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		return
 	}
 
-	client, err := web3client.NewMultiURLClient(config.BlockchainUrls)
+	client, err := web3client.NewMultiURLClient(config.BlockchainUrlsForEvents)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Failed to connect to Ethereum node: %s", err.Error()))
 		return
@@ -213,63 +151,11 @@ func Cycle(db *gorm.DB, cm *cache.CacheManager, id uint) {
 		casted = uniswapv3Handler
 		uniswapv3Handlers = append(uniswapv3Handlers, casted)
 	}
-	if len(participants) > 0 {
-		// tx := db.Begin()
-		tx := db
-		err = fetchInteractionsFromEthJSONRPC(
-			chainId.String(),
-			tx,
-			startBlock,
-			endBlock,
-			erc20Handlers,
-			participants,
-		)
-		if err != nil {
-			slog.Info(fmt.Sprintf("Cannot fetch ERC20 transfers due to %s", err.Error()))
-		}
-
-		err = fetchInteractionsFromEthJSONRPC(
-			chainId.String(),
-			tx,
-			startBlock,
-			endBlock,
-			aaveHandlers,
-			participants,
-		)
-		if err != nil {
-			slog.Info(fmt.Sprintf("Cannot fetch Aave interactions due to %s", err.Error()))
-		}
-
-		err = fetchInteractionsFromEthJSONRPC(
-			chainId.String(),
-			tx,
-			startBlock,
-			endBlock,
-			compoundHandlers,
-			participants,
-		)
-		if err != nil {
-			slog.Info(fmt.Sprintf("Cannot fetch Compound3 interactions due to %s", err.Error()))
-		}
-
-		err = fetchInteractionsFromEthJSONRPC(
-			chainId.String(),
-			tx,
-			startBlock,
-			endBlock,
-			uniswapv3Handlers,
-			participants,
-		)
-		if err != nil {
-			slog.Info(fmt.Sprintf("Cannot fetch UniswapV3 interactions due to %s", err.Error()))
-		}
-
-		if err == nil {
-			for i := range trackedWallets {
-				trackedWallets[i].LastBlock = endBlock
-			}
-			slog.Info(fmt.Sprintf("Successfully fetched blockchain events so mark wallets as indexed on block %d", endBlock))
-			db.Save(trackedWallets)
-		}
+	if len(participants) == 0 {
+		return
 	}
+
+	// Environment is ready to setup
+	env := NewFetchEnvironment(chainId.String(), db, trackedWallets, participants, erc20Handlers, aaveHandlers, compoundHandlers, uniswapv3Handlers)
+	env.Fetch(startBlock, endBlock)
 }

@@ -126,7 +126,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 
 	return trade.ParseEVMEvents(
 		h.ParallelFactor(),
-		h.Name(), chainId, eventsRaw, func(task *trade.ParallelEVMParserTask[trade.Compound3Event], generalEvent any) {
+		h.Name(), chainId, eventsRaw, func(task trade.ParallelEVMParserTask[trade.Compound3Event], generalEvent any) error {
 			switch generalEvent := generalEvent.(type) {
 			default:
 				slog.Info(fmt.Sprintf("[%s] Unexpected event type %s in chunk of Events", h.Name(), generalEvent))
@@ -135,8 +135,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 				if err != nil {
 					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
-					task.Wg.Done()
-					task.Cancel()
+					return err
 				}
 				item := trade.NewCompound3Event(
 					chainId,
@@ -155,8 +154,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 				if err != nil {
 					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Supply event %s", h.Name(), err.Error()))
-					task.Wg.Done()
-					task.Cancel()
+					return err
 				}
 				item := trade.NewCompound3Event(
 					chainId,
@@ -175,8 +173,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 				if err != nil {
 					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
-					task.Wg.Done()
-					task.Cancel()
+					return err
 				}
 				item := trade.NewCompound3Event(
 					chainId,
@@ -195,8 +192,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 				timestamp, err := h.cm.GetCachedBlockTimestamp(event.Raw.BlockNumber)
 				if err != nil {
 					slog.Warn(fmt.Sprintf("[%s] Failure on parsing Withdraw event %s", h.Name(), err.Error()))
-					task.Wg.Done()
-					task.Cancel()
+					return err
 				}
 				item := trade.NewCompound3Event(
 					chainId,
@@ -210,6 +206,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 				)
 				task.ValuesCh <- item
 			}
+			return nil
 		})
 }
 

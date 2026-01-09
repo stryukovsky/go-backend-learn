@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"sync"
 
 	"github.com/samber/lo"
+	"github.com/samber/lo/mutable"
+	"golang.org/x/sync/errgroup"
 )
 
 func RandomChoice[T any](slice []T) T {
@@ -27,9 +28,7 @@ type ParallelEVMParserTask[ParsedEvent any] struct {
 	ParallelFactor int
 	WorkerName     string
 	ChainId        string
-	Wg             *sync.WaitGroup
 	ValuesCh       chan ParsedEvent
-	Cancel         func()
 }
 
 func ParseEVMEvents[RawEvent, ParsedEvent any](
@@ -37,48 +36,49 @@ func ParseEVMEvents[RawEvent, ParsedEvent any](
 	workerName string,
 	chainId string,
 	events []RawEvent,
-	parseFn func(*ParallelEVMParserTask[ParsedEvent], RawEvent),
+	parseFn func(ParallelEVMParserTask[ParsedEvent], RawEvent) error,
 ) ([]ParsedEvent, error) {
 	if len(events) == 0 {
 		return []ParsedEvent{}, nil
 	}
 	eventChunks := Chunks(events, parallelFactor)
-	var wg sync.WaitGroup
-	wg.Add(len(eventChunks))
-	valuesCh := make(chan ParsedEvent, parallelFactor)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer ctx.Done()
+	valuesCh := make(chan ParsedEvent, len(events))
+	wg, ctx := errgroup.WithContext(context.Background())
 	task := ParallelEVMParserTask[ParsedEvent]{
 		ParallelFactor: parallelFactor,
 		WorkerName:     workerName,
 		ChainId:        chainId,
-		Wg:             &wg,
 		ValuesCh:       valuesCh,
-		Cancel:         cancel,
 	}
 	for i, chunk := range eventChunks {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() error {
 			slog.Debug(fmt.Sprintf("[%s] Parsing %d-th chunk of Supply Events", workerName, i+1))
 			for _, generalEvent := range chunk {
 				select {
 				case <-ctx.Done():
-					return
+					return ctx.Err()
 				default:
-					parseFn(&task, generalEvent)
+					if err := parseFn(task, generalEvent); err != nil {
+						return err
+					}
 				}
 			}
-		}()
+			return nil
+		})
 	}
-	go func() {
-		wg.Wait()
+	err := wg.Wait()
+	if err != nil {
 		close(valuesCh)
-	}()
+		// drain channel
+		for range valuesCh {
+		}
+		return nil, err
+	}
+	close(valuesCh)
 	result := make([]ParsedEvent, 0, len(events))
 	for item := range valuesCh {
 		result = append(result, item)
 	}
-	cancel()
 	return result, nil
 }
 
@@ -87,20 +87,23 @@ type WithURL interface {
 }
 
 func RetryEthCall[CallerPtr WithURL, R any](listCallers func() []CallerPtr, call func(CallerPtr) (R, error)) (R, error) {
-	callers := listCallers()
-	 var zero R
-	if len(callers) == 0 {
+	originalCallers := listCallers()
+	shuffledCallers := make([]CallerPtr, len(originalCallers))
+	copy(shuffledCallers, originalCallers)
+	mutable.Shuffle(shuffledCallers)
+	var zero R
+	if len(shuffledCallers) == 0 {
 		return zero, fmt.Errorf("No callers provided")
 	}
 	// firstly attempt random client
 
-	firstAttemptCaller := RandomChoice(callers)
+	firstAttemptCaller := RandomChoice(shuffledCallers)
 	result, err := call(firstAttemptCaller)
 	if err == nil {
 		// skip any next attempts of calling
 		return result, err
 	}
-	for _, client := range callers {
+	for _, client := range shuffledCallers {
 		r, e := call(client)
 		result = r
 		err = e

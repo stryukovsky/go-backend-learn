@@ -13,62 +13,79 @@ import (
 )
 
 func Arbitrum(db *gorm.DB) {
-	blockchainUrls := make(pq.StringArray, 5)
-	blockchainUrls[0] = "https://1rpc.io/arb"
-	blockchainUrls[1] = "https://api.zan.top/arb-one"
-	blockchainUrls[2] = "https://arbitrum.api.onfinality.io/public"
-	blockchainUrls[3] = "https://arbitrum.drpc.org"
-	blockchainUrls[4] = "https://arbitrum.gateway.tenderly.co"
+	blockchainUrlsForCache := make(pq.StringArray, 0)
+	blockchainUrlsForEvents := make(pq.StringArray, 0)
+	blockchainUrlsForEvents = append(blockchainUrlsForEvents, "https://arb1.arbitrum.io/rpc")
 
-	db.Create(&trade.Worker{BlockchainUrls: blockchainUrls, BlocksInterval: 1000})
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://1rpc.io/arb")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum-one-rpc.publicnode.com")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum-one-public.nodies.app")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arb-mainnet.g.alchemy.com/v2/demo")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum.public.blockpi.network/v1/rpc/public")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum-one.public.blastapi.io")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum-one-rpc.publicnode.com")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "wss://arbitrum-one-rpc.publicnode.com")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum.meowrpc.com")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://api.zan.top/arb-one")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum.drpc.org")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://api.stateless.solutions/arbitrum-one/v1/demo")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum.gateway.tenderly.co")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://endpoints.omniatech.io/v1/arbitrum/one/public")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arb1.lava.build")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arbitrum.api.onfinality.io/public")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arb-one-mainnet.gateway.tatum.io")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://rpc.poolz.finance/arbitrum")
+	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arb-one.api.pocket.network")
+
+	db.Create(&trade.Worker{BlockchainUrlsForEvents: blockchainUrlsForEvents, BlockchainUrlsForCacheManager: blockchainUrlsForCache, BlocksInterval: 50000})
 	// Arbitrum Chain ID is 42161
-	db.Create(
-		&trade.Token{
-			ChainId:  "42161",
-			Address:  "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-			Symbol:   "USDT",
-			Decimals: trade.NewDBInt(big.NewInt(6)),
-		})
-	db.Create(
-		&trade.Token{
-			ChainId:  "42161",
-			Address:  "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
-			Symbol:   "WETH",
-			Decimals: trade.NewDBInt(big.NewInt(18)),
-		})
-	db.Create(
-		// Note: No direct EUR stablecoin equivalent found on Arbitrum
-		&trade.Token{
-			ChainId:  "42161",
-			Address:  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-			Symbol:   "USDC",
-			Decimals: trade.NewDBInt(big.NewInt(6)),
-		})
-	// Note: BNB is not natively available on Arbitrum (it's a BSC token)
-	db.Create(
-		&trade.Token{
-			ChainId:  "42161",
-			Address:  "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4",
-			Symbol:   "LINK",
-			Decimals: trade.NewDBInt(big.NewInt(18)),
-		})
-	db.Create(
-		&trade.Token{
-			ChainId:  "42161",
-			Address:  "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0",
-			Symbol:   "UNI",
-			Decimals: trade.NewDBInt(big.NewInt(18)),
-		})
-	db.Create(
-		&trade.Token{
-			ChainId:  "42161",
-			Address:  "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f",
-			Symbol:   "WBTC",
-			Decimals: trade.NewDBInt(big.NewInt(8)),
-		})
-	db.Create(&trade.Chain{Name: "Arbitrum One", ChainId: "42161"})
-	db.Create(&trade.DeFiPlatform{Type: trade.Aave, ChainId: "42161", Address: "0x794a61358D6845594F94dc1DB02A252b5b4814aD"})
-	db.Create(&trade.DeFiPlatform{Type: trade.Compound3, ChainId: "42161", Address: "0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf"})
+	// db.Create(
+	// 	&trade.Token{
+	// 		ChainId:  "42161",
+	// 		Address:  "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+	// 		Symbol:   "USDT",
+	// 		Decimals: trade.NewDBInt(big.NewInt(6)),
+	// 	})
+	// db.Create(
+	// 	&trade.Token{
+	// 		ChainId:  "42161",
+	// 		Address:  "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+	// 		Symbol:   "WETH",
+	// 		Decimals: trade.NewDBInt(big.NewInt(18)),
+	// 	})
+	// db.Create(
+	// 	// Note: No direct EUR stablecoin equivalent found on Arbitrum
+	// 	&trade.Token{
+	// 		ChainId:  "42161",
+	// 		Address:  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+	// 		Symbol:   "USDC",
+	// 		Decimals: trade.NewDBInt(big.NewInt(6)),
+	// 	})
+	// // Note: BNB is not natively available on Arbitrum (it's a BSC token)
+	// db.Create(
+	// 	&trade.Token{
+	// 		ChainId:  "42161",
+	// 		Address:  "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4",
+	// 		Symbol:   "LINK",
+	// 		Decimals: trade.NewDBInt(big.NewInt(18)),
+	// 	})
+	// db.Create(
+	// 	&trade.Token{
+	// 		ChainId:  "42161",
+	// 		Address:  "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0",
+	// 		Symbol:   "UNI",
+	// 		Decimals: trade.NewDBInt(big.NewInt(18)),
+	// 	})
+	// db.Create(
+	// 	&trade.Token{
+	// 		ChainId:  "42161",
+	// 		Address:  "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f",
+	// 		Symbol:   "WBTC",
+	// 		Decimals: trade.NewDBInt(big.NewInt(8)),
+	// 	})
+	// db.Create(&trade.Chain{Name: "Arbitrum One", ChainId: "42161"})
+	// db.Create(&trade.DeFiPlatform{Type: trade.Aave, ChainId: "42161", Address: "0x794a61358D6845594F94dc1DB02A252b5b4814aD"})
+	// db.Create(&trade.DeFiPlatform{Type: trade.Compound3, ChainId: "42161", Address: "0x9c4ec768c28520B50860ea7a15bd7213a9fF58bf"})
 }
 
 func Binance(db *gorm.DB) {
@@ -204,7 +221,7 @@ func Ethereum(db *gorm.DB) {
 	blockchainUrls := make(pq.StringArray, 1)
 	blockchainUrls[0] = url
 
-	db.Create(&trade.Worker{BlockchainUrls: blockchainUrls, BlocksInterval: 1000})
+	db.Create(&trade.Worker{BlockchainUrlsForCacheManager: blockchainUrls, BlocksInterval: 1000})
 	db.Create(&trade.AnalyticsWorker{BlockchainUrls: blockchainUrls, BlocksInterval: 1000, LastBlock: 12369651})
 
 	db.Create(

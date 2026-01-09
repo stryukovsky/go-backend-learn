@@ -2,6 +2,8 @@ package web3client
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -20,13 +22,17 @@ type MultiURLClient struct {
 }
 
 func NewMultiURLClient(urls []string) (*MultiURLClient, error) {
-	clients := make([]*ClientWithURL, len(urls))
-	for i, url := range urls {
+	clients := make([]*ClientWithURL, 0, len(urls))
+	for _, url := range urls {
 		client, err := ethclient.Dial(url)
 		if err != nil {
-			return nil, err
+			slog.Warn(fmt.Sprintf("Failed to connect to JSON RPC %s: %v", url, err))
+		} else {
+			clients = append(clients, &ClientWithURL{Client: client, Url: url})
 		}
-		clients[i] = &ClientWithURL{Client: client, Url: url}
+	}
+	if len(clients) == 0 {
+		return nil, fmt.Errorf("No Ethereum JSONRPC URL is reachable")
 	}
 	return &MultiURLClient{clients}, nil
 }

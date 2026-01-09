@@ -31,13 +31,17 @@ type CacheManager struct {
 }
 
 func NewCacheManager(ethereumUrls pq.StringArray, redisAddr, redisPassword string, redisDb int) (*CacheManager, error) {
-	clients := make([]CacheEthJSONRPC, len(ethereumUrls))
-	for i, url := range ethereumUrls {
+	clients := make([]CacheEthJSONRPC, 0)
+	for _, url := range ethereumUrls {
 		client, err := ethclient.Dial(url)
 		if err != nil {
-			return nil, err
+			slog.Warn(fmt.Sprintf("Failed to connect to JSON RPC %s: %v", url, err))
+		} else {
+			clients = append(clients, CacheEthJSONRPC{Eth: *client, RpcUrl: url})
 		}
-		clients[i] = CacheEthJSONRPC{Eth: *client, RpcUrl: url}
+	}
+	if len(clients) == 0 {
+		return nil, fmt.Errorf("No available JSON RPC found")
 	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisAddr,

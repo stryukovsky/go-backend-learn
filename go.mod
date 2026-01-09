@@ -11,6 +11,7 @@ require (
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/samber/lo v1.51.0
 	github.com/urfave/cli/v3 v3.4.1
+	golang.org/x/sync v0.15.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.0
 )
@@ -65,7 +66,6 @@ require (
 	golang.org/x/arch v0.18.0 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
