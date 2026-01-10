@@ -38,7 +38,6 @@ func Arbitrum(db *gorm.DB) {
 	blockchainUrlsForCache = append(blockchainUrlsForCache, "https://arb-one.api.pocket.network")
 
 	db.Create(&trade.Worker{BlockchainUrlsForEvents: blockchainUrlsForEvents, BlockchainUrlsForCacheManager: blockchainUrlsForCache, BlocksInterval: 50000})
-	Arbitrum Chain ID is 42161
 	db.Create(
 		&trade.Token{
 			ChainId:  "42161",

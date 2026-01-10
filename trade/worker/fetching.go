@@ -58,16 +58,13 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 	resultsFinancial := make([]B, 0)
 	chBlockchain := make(chan A)
 	chFinancial := make(chan B)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var wg sync.WaitGroup
-	wg.Add(len(handlers))
+	eg, ctx := errgroup.WithContext(context.Background())
 	for _, handler := range handlers {
-		go func() {
-			defer wg.Done()
+		eg.Go(func() error {
 			select {
 			case <-ctx.Done():
 				slog.Warn("Cancelled fetchInteractionsFromEthJSONRPC")
+				return ctx.Err()
 			default:
 
 				blockchainInteractions, err := handler.FetchBlockchainInteractions(
@@ -78,13 +75,11 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 				)
 				if err != nil {
 					slog.Warn(fmt.Sprintf("[%s] Cannot fetch blockchain interactions: %s", handler.Name(), err.Error()))
-					cancel()
-					return
+					return err
 				}
 				if len(blockchainInteractions) == 0 {
-					slog.Warn(fmt.Sprintf("[%s] No blockchain interactions found", handler.Name()))
-					cancel()
-					return
+					slog.Info(fmt.Sprintf("[%s] No blockchain interactions found", handler.Name()))
+					return nil
 				}
 				for _, interaction := range blockchainInteractions {
 					chBlockchain <- interaction
@@ -97,29 +92,40 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 				financialInteractions, err := handler.PopulateWithFinanceInfo(blockchainInteractions)
 				if err != nil {
 					slog.Warn(fmt.Sprintf("[%s] Cannot fetch financial interactions: %s", handler.Name(), err.Error()))
-					cancel()
-					return
+					return err
 				}
+				slog.Info(fmt.Sprintf("[%s] Fetched %d financial interactions for corresponding %d blockchain interactions", handler.Name(), len(financialInteractions), len(blockchainInteractions)))
 
 				for _, interaction := range financialInteractions {
 					chFinancial <- interaction
 				}
+				return nil
 			}
-		}()
+		})
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() {
-		wg.Wait()
-		close(chBlockchain)
-		close(chFinancial)
+		defer wg.Done()
+		for value := range chBlockchain {
+			resultsBlockchain = append(resultsBlockchain, value)
+		}
 	}()
+	go func() {
+		defer wg.Done()
+		for value := range chFinancial {
+			resultsFinancial = append(resultsFinancial, value)
+		}
+	}()
+	err := eg.Wait()
+	close(chBlockchain)
+	close(chFinancial)
+	wg.Wait()
+	if err != nil {
+		return nil, nil, err
+	}
 
-	for value := range chBlockchain {
-		resultsBlockchain = append(resultsBlockchain, value)
-	}
-	for value := range chFinancial {
-		resultsFinancial = append(resultsFinancial, value)
-	}
 	return resultsBlockchain, resultsFinancial, nil
 }
 
@@ -129,6 +135,7 @@ func saveInteractions[T any](db *gorm.DB, interactions []T, handlerName string) 
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) {
+				slog.Warn(fmt.Sprintf("[%s] Error on postgres, possibly duplicate: %v", handlerName, err))
 				// Duplicate key – ignore
 				continue
 			}
@@ -149,12 +156,12 @@ func (f *FetchEnvironment) Fetch(startBlock, endBlock uint64) {
 			name:     "ERC20",
 			handlers: f.erc20Handlers,
 			run: func() error {
-				blockchain, financial, err := fetchInteractionsFromEthJSONRPC(
+				_, financial, err := fetchInteractionsFromEthJSONRPC(
 					f.chainId, startBlock, endBlock, f.erc20Handlers, f.participants)
 				if err != nil {
 					return err
 				}
-				saveInteractions(f.db, blockchain, "ERC20")
+				// saveInteractions(f.db, blockchain, "ERC20")
 				saveInteractions(f.db, financial, "ERC20")
 				return nil
 			},

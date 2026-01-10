@@ -118,7 +118,7 @@ func (h *Compound3Handler) FetchBlockchainInteractions(
 		eventsRaw = append(eventsRaw, *collateralWithdrawEventsIter.Event)
 	}
 	if len(eventsRaw) == 0 {
-		slog.Warn(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
+		slog.Info(fmt.Sprintf("[%s] no events in block range %d - %d", h.Name(), fromBlock, toBlock))
 		return make([]trade.Compound3Event, 0), nil
 	} else {
 		slog.Info(fmt.Sprintf("[%s] found %d events in block range %d - %d", h.Name(), len(eventsRaw), fromBlock, toBlock))
