@@ -47,17 +47,17 @@ func NewFetchEnvironment(
 	}
 }
 
-func fetchInteractionsFromEthJSONRPC[A any, B any](
+func fetchInteractionsFromEthJSONRPC[BlockchainInteractions any, FinancialInteractions any](
 	chainId string,
 	startBlock uint64,
 	endBlock uint64,
-	handlers []protocols.DeFiProtocolHandler[A, B],
+	handlers []protocols.DeFiProtocolHandler[BlockchainInteractions, FinancialInteractions],
 	participants []string,
-) ([]A, []B, error) {
-	resultsBlockchain := make([]A, 0)
-	resultsFinancial := make([]B, 0)
-	chBlockchain := make(chan A)
-	chFinancial := make(chan B)
+) ([]FinancialInteractions, error) {
+	resultsBlockchain := make([]BlockchainInteractions, 0)
+	resultsFinancial := make([]FinancialInteractions, 0)
+	chBlockchain := make(chan BlockchainInteractions)
+	chFinancial := make(chan FinancialInteractions)
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, handler := range handlers {
 		eg.Go(func() error {
@@ -123,10 +123,10 @@ func fetchInteractionsFromEthJSONRPC[A any, B any](
 	close(chFinancial)
 	wg.Wait()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return resultsBlockchain, resultsFinancial, nil
+	return resultsFinancial, nil
 }
 
 func saveInteractions[T any](db *gorm.DB, interactions []T, handlerName string) {
@@ -156,12 +156,11 @@ func (f *FetchEnvironment) Fetch(startBlock, endBlock uint64) {
 			name:     "ERC20",
 			handlers: f.erc20Handlers,
 			run: func() error {
-				_, financial, err := fetchInteractionsFromEthJSONRPC(
+				financial, err := fetchInteractionsFromEthJSONRPC(
 					f.chainId, startBlock, endBlock, f.erc20Handlers, f.participants)
 				if err != nil {
 					return err
 				}
-				// saveInteractions(f.db, blockchain, "ERC20")
 				saveInteractions(f.db, financial, "ERC20")
 				return nil
 			},
@@ -170,12 +169,11 @@ func (f *FetchEnvironment) Fetch(startBlock, endBlock uint64) {
 			name:     "Aave",
 			handlers: f.aaveHandlers,
 			run: func() error {
-				blockchain, financial, err := fetchInteractionsFromEthJSONRPC(
+				financial, err := fetchInteractionsFromEthJSONRPC(
 					f.chainId, startBlock, endBlock, f.aaveHandlers, f.participants)
 				if err != nil {
 					return err
 				}
-				saveInteractions(f.db, blockchain, "Aave")
 				saveInteractions(f.db, financial, "Aave")
 				return nil
 			},
@@ -184,12 +182,11 @@ func (f *FetchEnvironment) Fetch(startBlock, endBlock uint64) {
 			name:     "Compound3",
 			handlers: f.compoundHandlers,
 			run: func() error {
-				blockchain, financial, err := fetchInteractionsFromEthJSONRPC(
+				financial, err := fetchInteractionsFromEthJSONRPC(
 					f.chainId, startBlock, endBlock, f.compoundHandlers, f.participants)
 				if err != nil {
 					return err
 				}
-				saveInteractions(f.db, blockchain, "Compound3")
 				saveInteractions(f.db, financial, "Compound3")
 				return nil
 			},
@@ -198,12 +195,11 @@ func (f *FetchEnvironment) Fetch(startBlock, endBlock uint64) {
 			name:     "UniswapV3",
 			handlers: f.uniswapv3Handlers,
 			run: func() error {
-				blockchain, financial, err := fetchInteractionsFromEthJSONRPC(
+				financial, err := fetchInteractionsFromEthJSONRPC(
 					f.chainId, startBlock, endBlock, f.uniswapv3Handlers, f.participants)
 				if err != nil {
 					return err
 				}
-				saveInteractions(f.db, blockchain, "UniswapV3")
 				saveInteractions(f.db, financial, "UniswapV3")
 				return nil
 			},
