@@ -9,7 +9,7 @@
             "program": "${workspaceFolder}",
             "args": ["index"],
             "outputMode": "remote",      
-            "console": "integratedTerminal" 
+            "console": "internalConsole" 
         }
     ]
 }
