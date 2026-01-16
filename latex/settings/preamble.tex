@@ -1,67 +1,166 @@
-\documentclass[
-candidate, % document type
-subf, % use and configure subfig package for nested figure numbering
-times % use Times font as main
-]{disser}
+% Компилятор: XeLaTeX
+\documentclass[14pt, a4paper]{extreport}
 
-% Кодировка и язык
-\usepackage[T2A]{fontenc} % поддержка кириллицы
-\usepackage[utf8]{inputenc} % кодировка исходного текста
-\usepackage[english,russian]{babel} % переключение языков
+% Кодировка и языки
+\usepackage{polyglossia}
+\setdefaultlanguage{russian}
+\setotherlanguage{english}
 
-% Геометрия страницы и графика
-\usepackage[left=3cm, right=1cm, top=2cm, bottom=2cm]{geometry} % поля страницы
-\usepackage{graphicx} % подключение графики
-\usepackage{pdfpages} % вставка pdf-страниц
+% Шрифты
+\usepackage{fontspec}
+\setmainfont{Liberation Serif}
+\setsansfont{Liberation Sans}
+\setmonofont{Liberation Mono}
+
+% Математические шрифты
+\usepackage{unicode-math}
+\setmathfont{Latin Modern Math}
+
+% Математические пакеты
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{mathtools}
+
+% Геометрия страницы по ГОСТ 7.32-2017
+\usepackage[
+    left=3cm,
+    right=1cm,
+    top=2cm,
+    bottom=2cm
+]{geometry}
+
+% Полуторный интервал по ГОСТ
+\usepackage{setspace}
+\onehalfspacing
+
+% Абзацный отступ 1.25 см по ГОСТ
+\usepackage{indentfirst}
+\setlength{\parindent}{1.25cm}
+
+% Для включения PDF (титульный лист)
+\usepackage{pdfpages}
+
+% Заголовки по ГОСТ
+\usepackage{titlesec}
+
+% Главы (chapters)
+\titleformat{\chapter}
+    {\normalfont\bfseries\centering}
+    {\thechapter}{1em}{}
+\titlespacing*{\chapter}{0pt}{0pt}{*2}
+
+% Разделы (sections)
+\titleformat{\section}
+    {\normalfont\bfseries}
+    {\thesection}{1em}{}
+\titlespacing*{\section}{\parindent}{*2}{*1}
+
+% Подразделы (subsections)
+\titleformat{\subsection}
+    {\normalfont\bfseries}
+    {\thesubsection}{1em}{}
+\titlespacing*{\subsection}{\parindent}{*2}{*1}
+
+% Нумерация по ГОСТ
+\renewcommand{\thechapter}{\arabic{chapter}}
+\renewcommand{\thesection}{\thechapter.\arabic{section}}
+\renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
+
+% Содержание
+\usepackage{tocloft}
+\renewcommand{\cftchapleader}{\cftdotfill{\cftdotsep}}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\setlength{\cftbeforechapskip}{0pt}
+\setlength{\cftbeforesecskip}{0pt}
+
+% Графика
+\usepackage{graphicx}
+\usepackage{float}
+\graphicspath{{images/}{figures/}}
+
+% Подписи к рисункам и таблицам по ГОСТ
+\usepackage{caption}
+\DeclareCaptionLabelSeparator{defffis}{ -- }
+\captionsetup{
+    labelsep=defffis,
+    font=small,
+    justification=centering
+}
+\renewcommand{\thefigure}{\thechapter.\arabic{figure}}
+\renewcommand{\thetable}{\thechapter.\arabic{table}}
+
 % Таблицы
-\usepackage{array} % расширенные возможности для работы с таблицами
-\usepackage{tabularx} % автоматический подбор ширины столбцов
-\usepackage{dcolumn} % выравнивание чисел по разделителю
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{array}
 
-% Математика
-\usepackage{bm} % полужирное начертание для математических символов
-\usepackage{amsmath} % дополнительные математические возможности
-\usepackage{amssymb} % дополнительные математические символы
+% Списки
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=\parindent}
 
-% Библиография и ссылки
-\usepackage{cite} % поддержка цитирования
-\usepackage{hyperref} % создание гиперссылок
+% Библиография
+\usepackage[square,numbers,sort&compress]{natbib}
+\bibliographystyle{unsrt}
 
-% Прочее
-\usepackage{color} % работа с цветом
-\usepackage{epstopdf} % конвертация eps в pdf
-\usepackage{multirow} % объединение ячеек таблиц по вертикали
-\usepackage{afterpage} % вставка материала после текущей страницы
-\usepackage[font={normal}]{caption} % настройка подписей к рисункам и таблицам
-\usepackage[onehalfspacing]{setspace} % полуторный интервал
-\usepackage{fancyhdr} % установка колонтитулов
-\usepackage{listings} % поддержка вставки исходного кода
+% Ссылки
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    filecolor=black,
+    urlcolor=blue,
+    citecolor=black,
+    pdftitle={Магистерская диссертация},
+    pdfauthor={Ваше имя}
+}
 
-% Установка шрифта Times New Roman
-\renewcommand{\rmdefault}{ftm}
+% Листинги кода
+\usepackage{listings}
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    tabsize=4,
+    captionpos=b
+}
+\renewcommand{\lstlistingname}{Листинг}
 
-% Создание нового типа столбца для выравнивания содержимого по центру
-\newcommand{\PreserveBackslash}[1]{\let\temp=\\#1\let\\=\temp}
-\newcolumntype{C}[1]{>{\PreserveBackslash\centering}p{#1}}
+% Теоремы и определения
+\newtheorem{theorem}{Теорема}[chapter]
+\newtheorem{lemma}[theorem]{Лемма}
+\newtheorem{proposition}[theorem]{Утверждение}
+\newtheorem{corollary}[theorem]{Следствие}
 
-% Настройка стиля страницы
-\pagestyle{fancy}      % Использование стиля "fancy" для оформления страниц
-\fancyhf{}              % Очистка текущих значений колонтитулов
-\fancyfoot[C]{\thepage} % Установка номера страницы в нижнем колонтитуле по центру
-\renewcommand{\headrulewidth}{0pt} % Удаление разделительной линии в верхнем колонтитуле
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Определение}
+\newtheorem{example}[theorem]{Пример}
 
-% Настройка подписей к изображениям и таблицам
-\captionsetup{format=hang,labelsep=period}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Замечание}
+\newtheorem{note}[theorem]{Примечание}
 
-% Использование полужирного начертания для векторов
-\let\vec=\mathbf
+% Правильные кавычки
+\usepackage{csquotes}
 
-% Установка глубины оглавления
-\setcounter{tocdepth}{2}
+% Переносы
+\usepackage{microtype}
 
-% Указание папки для поиска изображений
-\graphicspath{{images/}}
+% Приложения
+\usepackage[title,titletoc]{appendix}
 
-% Установка стилей страницы и главы
-\pagestyle{footcenter}
-\chapterpagestyle{footcenter}
+% Счетчики для формул по главам
+\numberwithin{equation}{chapter}
+
+% Переопределение названий
+\addto\captionsrussian{%
+    \renewcommand{\figurename}{Рисунок}%
+    \renewcommand{\tablename}{Таблица}%
+    \renewcommand{\contentsname}{Содержание}%
+    \renewcommand{\bibname}{Список литературы}%
+    \renewcommand{\chaptername}{Глава}%
+    \renewcommand{\appendixname}{Приложение}%
+}
