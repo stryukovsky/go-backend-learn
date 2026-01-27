@@ -14,12 +14,11 @@
 
 % Математические шрифты
 \usepackage{unicode-math}
-\setmathfont{Latin Modern Math}
+\setmathfont{Libertinus Math}
 
 % Математические пакеты
 \usepackage{amsmath}
 \usepackage{amsthm}
-\usepackage{amssymb}
 \usepackage{mathtools}
 
 % Геометрия страницы по ГОСТ 7.32-2017
@@ -29,6 +28,8 @@
     top=2cm,
     bottom=2cm
 ]{geometry}
+
+\setlength{\emergencystretch}{2em} % or 3em, adjust as needed
 
 % Полуторный интервал по ГОСТ
 \usepackage{setspace}
@@ -95,15 +96,25 @@
 \usepackage{longtable}
 \usepackage{multirow}
 \usepackage{array}
-
+\hbadness=10000    % hides underfull hbox warnings
+\vbadness=10000    % hides underfull vbox warnings  
 % Списки
 \usepackage{enumitem}
 \setlist{nosep, leftmargin=\parindent}
 
 % Библиография
-\usepackage[square,numbers,sort&compress]{natbib}
-\bibliographystyle{unsrt}
+% \usepackage[square,numbers,sort&compress]{natbib}
+% \bibliographystyle{unsrt}
+% \usepackage[backend=biber, style=authoryear]{biblatex} % or your preferred style
+% \addbibresource{biblio/bibliography.bib} % папка biblio, файл biblio.bib
+\usepackage[
+  backend=biber,
+  style=gost-numeric,      % or gost-authoryear, gost-footnote, etc.
+  language=auto,
+  autolang=other
+]{biblatex}
 
+\addbibresource{biblio/bibliography.bib} % path relative to main .tex
 % Ссылки
 \usepackage{hyperref}
 \hypersetup{
