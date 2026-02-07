@@ -70,14 +70,14 @@ func ListChains(ctx *gin.Context, db *gorm.DB) {
 }
 
 func ListAaveInteractions(ctx *gin.Context, db *gorm.DB) {
-
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
+	
 	var aaveInteractions []trade.AaveInteraction
-	err := db.Preload("BlockchainEvent").Find(
-		&aaveInteractions,
-		trade.AaveInteraction{BlockchainEvent: trade.AaveEvent{WalletAddress: wallet, ChainId: chainId}},
-	).Error
+	err := db.Preload("BlockchainEvent").
+		Joins("JOIN aave_events ON aave_events.id = aave_interactions.blockchain_event_id").
+		Where("aave_events.wallet_address = ? AND aave_events.chain_id = ?", wallet, chainId).
+		Find(&aaveInteractions).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -85,14 +85,44 @@ func ListAaveInteractions(ctx *gin.Context, db *gorm.DB) {
 	ctx.JSON(http.StatusOK, aaveInteractions)
 }
 
+func ListCompound3Interactions(ctx *gin.Context, db *gorm.DB) {
+	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
+	chainId := ctx.Param("chainId")
+	
+	var compoundInteractions []trade.Compound3Interaction
+	err := db.Preload("BlockchainEvent").
+		Joins("JOIN compound3_events ON compound3_events.id = compound3_interactions.blockchain_event_id").
+		Where("compound3_events.wallet_address = ? AND compound3_events.chain_id = ?", wallet, chainId).
+		Find(&compoundInteractions).Error
+	if err != nil {
+		apiErr(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, compoundInteractions)
+}
+
+func GetTokenBalancesByChain(ctx *gin.Context, db *gorm.DB, cm *cache.CacheManager) {
+	chainId := ctx.Param("chainId")
+
+	tokenBalances, err := cm.GetCachedTokenBalancesByChain(db, chainId)
+	if err != nil {
+		apiErr(ctx, err)
+		return
+	}
+
+	slog.Info(fmt.Sprintf("Retrieved token balances for chain %s: %d tokens", chainId, len(tokenBalances)))
+	ctx.JSON(http.StatusOK, tokenBalances)
+}
+
 func ListUniswapV3Interactions(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
+	
 	var uniswapv3Interactions []trade.UniswapV3Deal
-	err := db.Preload("BlockchainEvent").Find(
-		&uniswapv3Interactions,
-		trade.UniswapV3Deal{BlockchainEvent: trade.UniswapV3Event{WalletAddress: wallet, ChainId: chainId}},
-	).Error
+	err := db.Preload("BlockchainEvent").
+		Joins("JOIN uniswap_v3_events ON uniswap_v3_events.id = uniswap_v3_deals.blockchain_event_id").
+		Where("uniswap_v3_events.wallet_address = ? AND uniswap_v3_events.chain_id = ?", wallet, chainId).
+		Find(&uniswapv3Interactions).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
@@ -103,19 +133,27 @@ func ListUniswapV3Interactions(ctx *gin.Context, db *gorm.DB) {
 func ListDealsByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
+
 	dealsAsSender := []trade.Deal{}
-	err := db.Preload("BlockchainTransfer").Find(&dealsAsSender, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Sender: wallet, ChainId: chainId}}).Error
+	err := db.Preload("BlockchainTransfer").
+		Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+		Where("erc20_transfers.sender = ? AND erc20_transfers.chain_id = ?", wallet, chainId).
+		Find(&dealsAsSender).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
 	}
 
 	dealsAsRecipient := []trade.Deal{}
-	err = db.Preload("BlockchainTransfer").Find(&dealsAsRecipient, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Recipient: wallet}}).Error
+	err = db.Preload("BlockchainTransfer").
+		Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+		Where("erc20_transfers.recipient = ? AND erc20_transfers.chain_id = ?", wallet, chainId).
+		Find(&dealsAsRecipient).Error
 	if err != nil {
 		apiErr(ctx, err)
 		return
 	}
+
 	result := trade.NewDealsByWallet(wallet, dealsAsRecipient, dealsAsSender)
 	ctx.JSON(http.StatusOK, result)
 }
@@ -144,5 +182,11 @@ func CreateApi(router *gin.Engine, db *gorm.DB, cm *cache.CacheManager) {
 	})
 	router.GET("/api/uniswapv3/:chainId/:wallet", func(ctx *gin.Context) {
 		ListUniswapV3Interactions(ctx, db)
+	})
+	router.GET("/api/compound3/:chainId/:wallet", func(ctx *gin.Context) {
+		ListCompound3Interactions(ctx, db)
+	})
+	router.GET("/api/chain/:chainId/token-balances", func(ctx *gin.Context) {
+		GetTokenBalancesByChain(ctx, db, cm)
 	})
 }

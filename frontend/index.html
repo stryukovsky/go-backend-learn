@@ -15,7 +15,7 @@
 
       body {
         font-family: monospace;
-        <!-- background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -->
+        /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
         min-height: 100vh;
         color: #333;
       }
@@ -146,6 +146,104 @@
       .balance-label {
         font-size: 1rem;
         opacity: 0.9;
+      }
+
+      /* Token Balances Styles */
+      .token-balances-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 16px;
+        margin-top: 20px;
+      }
+
+      .token-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .token-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        border-color: #667eea;
+      }
+
+      .token-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #cbd5e0;
+      }
+
+      .token-symbol {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #2d3748;
+      }
+
+      .token-total {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #48bb78;
+      }
+
+      .token-address-display {
+        font-family: "Courier New", monospace;
+        font-size: 0.75rem;
+        color: #718096;
+        margin-bottom: 12px;
+        word-break: break-all;
+      }
+
+      .wallet-balances-list {
+        margin-top: 12px;
+      }
+
+      .wallet-balance-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: white;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+      }
+
+      .wallet-balance-address {
+        font-family: "Courier New", monospace;
+        color: #4a5568;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 60%;
+      }
+
+      .wallet-balance-amount {
+        font-weight: 600;
+        color: #2d3748;
+      }
+
+      .expand-toggle {
+        text-align: center;
+        margin-top: 8px;
+        padding: 6px;
+        background: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        color: #667eea;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+
+      .expand-toggle:hover {
+        background: #ebf4ff;
       }
 
       .deals-section {
@@ -385,6 +483,10 @@
           grid-template-columns: 1fr;
         }
 
+        .token-balances-grid {
+          grid-template-columns: 1fr;
+        }
+
         .header h1 {
           font-size: 2rem;
         }
@@ -435,6 +537,71 @@
           </div>
         </div>
 
+        <!-- Step 1.5: Chain Token Balances (NEW) -->
+        <div v-if="selectedChain && tokenBalances.length > 0" class="card">
+          <h2>💎 Token Balances on {{ selectedChain.name }}</h2>
+          <div class="token-balances-grid">
+            <div
+              v-for="token in tokenBalances"
+              :key="token.tokenAddress"
+              class="token-card"
+            >
+              <div class="token-header">
+                <div class="token-symbol">{{ token.tokenSymbol }}</div>
+                <div class="token-total">
+                  {{ formatTokenBalance(token.totalBalance) }}
+                </div>
+              </div>
+              <div class="token-address-display">{{ token.tokenAddress }}</div>
+
+              <!-- Show first 3 wallets by default -->
+              <div class="wallet-balances-list">
+                <div
+                  v-for="(wallet, index) in token.wallets.slice(0, token.expanded ? undefined : 3)"
+                  :key="wallet.walletAddress"
+                  class="wallet-balance-item"
+                >
+                  <div
+                    class="wallet-balance-address"
+                    :title="wallet.walletAddress"
+                  >
+                    {{ formatWalletAddress(wallet.walletAddress) }}
+                  </div>
+                  <div class="wallet-balance-amount">
+                    {{ formatTokenBalance(wallet.balance) }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Expand/Collapse toggle if more than 3 wallets -->
+              <div
+                v-if="token.wallets.length > 3"
+                class="expand-toggle"
+                @click="toggleTokenExpansion(token)"
+              >
+                {{ token.expanded ? '▲ Show Less' : `▼ Show All
+                (${token.wallets.length})` }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading State for Token Balances -->
+        <div v-if="selectedChain && loadingTokenBalances" class="card">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading token balances...</p>
+          </div>
+        </div>
+
+        <!-- Empty state for token balances -->
+        <div
+          v-if="selectedChain && !loadingTokenBalances && tokenBalances.length === 0"
+          class="card"
+        >
+          <div class="empty-state">No token balances found on this chain</div>
+        </div>
+
         <!-- Step 2: Wallet Selection -->
         <div v-if="selectedChain && wallets.length > 0" class="card">
           <h2>💼 Your Wallets on {{ selectedChain.name }}</h2>
@@ -467,7 +634,9 @@
             <div class="balance-amount">
               {{ formatBalance(balance.balance) }}
             </div>
-            <div class="balance-label">Tokens on {{ selectedChain.name }}</div>
+            <div class="balance-label">
+              Total USD Value on {{ selectedChain.name }}
+            </div>
           </div>
         </div>
 
@@ -641,14 +810,12 @@
             balance: null,
             deals: null,
             selectedDeal: null,
+            tokenBalances: [],
+            loadingTokenBalances: false,
             loading: false,
             error: null,
             apiBaseUrl: "http://localhost:8080",
           };
-        },
-
-        computed: {
-          // Remove the currentDeals computed property since we're not using tabs anymore
         },
 
         async mounted() {
@@ -677,9 +844,34 @@
               this.selectedWallet = null;
               this.balance = null;
               this.deals = null;
+              this.tokenBalances = [];
               return;
             }
-            await this.loadWallets();
+            await Promise.all([this.loadWallets(), this.loadTokenBalances()]);
+          },
+
+          async loadTokenBalances() {
+            try {
+              this.loadingTokenBalances = true;
+              this.error = null;
+              this.tokenBalances = [];
+
+              const response = await axios.get(
+                `${this.apiBaseUrl}/api/chain/${this.selectedChain.ChainId}/token-balances`,
+              );
+
+              // Add expanded property to each token for UI control
+              this.tokenBalances = (response.data || []).map((token) => ({
+                ...token,
+                expanded: false,
+              }));
+            } catch (error) {
+              this.error =
+                "Failed to load token balances: " +
+                (error.response?.data?.error || error.message);
+            } finally {
+              this.loadingTokenBalances = false;
+            }
           },
 
           async loadWallets() {
@@ -752,13 +944,42 @@
             this.selectedDeal = null;
           },
 
+          toggleTokenExpansion(token) {
+            token.expanded = !token.expanded;
+          },
+
           formatBalance(balance) {
-            // Convert Wei to Ether (assuming 18 decimals)
             const balanceNum = parseFloat(balance);
             if (balanceNum >= 1e18) {
               return (balanceNum / 1e18).toFixed(4);
             }
             return balanceNum.toLocaleString();
+          },
+
+          formatTokenBalance(balance) {
+            const balanceNum = parseFloat(balance);
+            if (isNaN(balanceNum)) return "0.00";
+
+            // Format with appropriate decimal places
+            if (balanceNum >= 1000000) {
+              return (balanceNum / 1000000).toFixed(2) + "M";
+            } else if (balanceNum >= 1000) {
+              return (balanceNum / 1000).toFixed(2) + "K";
+            } else if (balanceNum >= 1) {
+              return balanceNum.toFixed(4);
+            } else if (balanceNum > 0) {
+              return balanceNum.toFixed(6);
+            }
+            return balanceNum.toFixed(4);
+          },
+
+          formatWalletAddress(address) {
+            if (!address) return "";
+            // Show first 6 and last 4 characters
+            if (address.length > 12) {
+              return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+            }
+            return address;
           },
 
           formatDate(dateString) {

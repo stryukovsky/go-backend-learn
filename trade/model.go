@@ -447,3 +447,26 @@ func NewDealsByWallet(wallet string, dealsIn []Deal, dealsOut []Deal) *DealsByWa
 		DealsOut: dealsOut,
 	}
 }
+
+type TokenBalanceByChain struct {
+    ChainId      string `json:"chainId" binding:"required"`
+    TokenAddress string `json:"tokenAddress" binding:"required"`
+    TokenSymbol  string `json:"tokenSymbol" binding:"required"`
+    TotalBalance string `json:"totalBalance" binding:"required"`
+    Wallets      []WalletBalance `json:"wallets" binding:"required"`
+}
+
+type WalletBalance struct {
+    WalletAddress string `json:"walletAddress" binding:"required"`
+    Balance       string `json:"balance" binding:"required"`
+}
+
+func NewTokenBalanceByChain(chainId string, tokenAddress string, tokenSymbol string, totalBalance string, wallets []WalletBalance) *TokenBalanceByChain {
+    return &TokenBalanceByChain{
+        ChainId:      chainId,
+        TokenAddress: tokenAddress,
+        TokenSymbol:  tokenSymbol,
+        TotalBalance: totalBalance,
+        Wallets:      wallets,
+    }
+}

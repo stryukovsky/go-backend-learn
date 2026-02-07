@@ -170,19 +170,23 @@ func (cm *CacheManager) GetCachedBalanceOfWallet(db *gorm.DB, walletAddress stri
 	}
 	if cachedBalance == "" {
 		var dealsIncome []trade.Deal
-		countIncome := 0
-		err = db.Preload("BlockchainTransfer").Where("blockchain_transfer.recipient = ?", walletAddress).First(&dealsIncome, &countIncome).Error
+		err = db.Preload("BlockchainTransfer").
+			Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+			Where("erc20_transfers.recipient = ?", walletAddress).
+			Find(&dealsIncome).Error
 		if err != nil {
 			return nil, err
 		}
 
 		var dealsOutcome []trade.Deal
-		countOutcome := 0
-		err = db.Preload("BlockchainTransfer").Where("blockchain_transfer.sender = ?", walletAddress).First(&dealsIncome, &countOutcome).Error
+		err = db.Preload("BlockchainTransfer").
+			Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+			Where("erc20_transfers.sender = ?", walletAddress).
+			Find(&dealsOutcome).Error
 		if err != nil {
 			return nil, err
 		}
-		slog.Debug(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), countOutcome, walletAddress))
+		slog.Debug(fmt.Sprintf("Found %d income and %d outcome deals of %s", len(dealsIncome), len(dealsOutcome), walletAddress))
 
 		balance := calculateBalance(dealsIncome, dealsOutcome)
 		cachedData, _ := json.Marshal(trade.BalanceAcrossAllChains{Address: walletAddress, Balance: balance})
@@ -216,21 +220,23 @@ func (cm *CacheManager) GetCachedBalanceOfWalletOnChain(db *gorm.DB, chainId str
 	}
 
 	dealsIncome := []trade.Deal{}
+	err = db.Preload("BlockchainTransfer").
+		Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+		Where("erc20_transfers.recipient = ? AND erc20_transfers.chain_id = ?", walletAddress, chainId).
+		Find(&dealsIncome).Error
+	if err != nil {
+		return nil, err
+	}
+
 	dealsOutcome := []trade.Deal{}
-	err = db.
-		Preload("BlockchainTransfer").
-		Find(&dealsIncome, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Recipient: walletAddress, ChainId: chainId}}).
-		Error
+	err = db.Preload("BlockchainTransfer").
+		Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+		Where("erc20_transfers.sender = ? AND erc20_transfers.chain_id = ?", walletAddress, chainId).
+		Find(&dealsOutcome).Error
 	if err != nil {
 		return nil, err
 	}
-	err = db.
-		Preload("BlockchainTransfer").
-		Find(&dealsOutcome, trade.Deal{BlockchainTransfer: trade.ERC20Transfer{Sender: walletAddress, ChainId: chainId}}).
-		Error
-	if err != nil {
-		return nil, err
-	}
+
 	balance := calculateBalance(dealsIncome, dealsOutcome)
 
 	result := trade.NewBalanceOnChain(chainId, walletAddress, balance)
@@ -238,5 +244,167 @@ func (cm *CacheManager) GetCachedBalanceOfWalletOnChain(db *gorm.DB, chainId str
 	if err != nil {
 		return nil, err
 	}
+	return result, nil
+}
+
+func calculateTokenBalance(income []trade.Deal, outcome []trade.Deal) string {
+	result := big.NewRat(0, 1)
+	for _, deal := range income {
+		result = result.Add(result, deal.VolumeTokens.Rat)
+	}
+	for _, deal := range outcome {
+		result = result.Sub(result, deal.VolumeTokens.Rat)
+	}
+	balance := result.FloatString(6)
+	return balance
+}
+
+func (cm *CacheManager) GetCachedTokenBalancesByChain(db *gorm.DB, chainId string) ([]trade.TokenBalanceByChain, error) {
+	cacheKey := fmt.Sprintf("tokenBalancesByChain:%s", chainId)
+	cachedData, err := cm.Get(cacheKey)
+
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
+	if "a" == "" {
+		var result []trade.TokenBalanceByChain
+		err = json.Unmarshal([]byte(cachedData), &result)
+		if err != nil {
+			return nil, err
+		}
+		slog.Debug(fmt.Sprintf("[Cache] Token balances for chain %s retrieved from cache", chainId))
+		return result, nil
+	}
+
+	// Get all tracked wallets for this chain
+	var wallets []trade.TrackedWallet
+	err = db.Find(&wallets, trade.TrackedWallet{ChainId: chainId}).Error
+	if err != nil {
+		return nil, err
+	}
+
+	if len(wallets) == 0 {
+		return []trade.TokenBalanceByChain{}, nil
+	}
+
+	// Map to aggregate balances: tokenAddress -> TokenBalanceByChain
+	tokenBalancesMap := make(map[string]*trade.TokenBalanceByChain)
+
+	// For each wallet, get deals and aggregate by token
+	for _, wallet := range wallets {
+		walletAddr := wallet.Address
+
+		// Get income deals
+		// In the section where we query deals, replace with:
+		var dealsIncome []trade.Deal
+		err = db.Preload("BlockchainTransfer").
+			Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+			Where("erc20_transfers.recipient = ? AND erc20_transfers.chain_id = ?", walletAddr, chainId).
+			Find(&dealsIncome).Error
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Error getting income deals for wallet %s: %v", walletAddr, err))
+			continue
+		}
+
+		// Get outcome deals
+		var dealsOutcome []trade.Deal
+		err = db.Preload("BlockchainTransfer").
+			Joins("JOIN erc20_transfers ON erc20_transfers.id = deals.blockchain_transfer_id").
+			Where("erc20_transfers.sender = ? AND erc20_transfers.chain_id = ?", walletAddr, chainId).
+			Find(&dealsOutcome).Error
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Error getting outcome deals for wallet %s: %v", walletAddr, err))
+			continue
+		}
+
+		// Group deals by token for this wallet
+		tokenDealsIncome := make(map[string][]trade.Deal)
+		tokenDealsOutcome := make(map[string][]trade.Deal)
+
+		for _, deal := range dealsIncome {
+			tokenAddr := deal.BlockchainTransfer.TokenAddress
+			tokenDealsIncome[tokenAddr] = append(tokenDealsIncome[tokenAddr], deal)
+		}
+
+		for _, deal := range dealsOutcome {
+			tokenAddr := deal.BlockchainTransfer.TokenAddress
+			tokenDealsOutcome[tokenAddr] = append(tokenDealsOutcome[tokenAddr], deal)
+		}
+
+		// Calculate balance for each token this wallet has
+		allTokens := make(map[string]bool)
+		for token := range tokenDealsIncome {
+			allTokens[token] = true
+		}
+		for token := range tokenDealsOutcome {
+			allTokens[token] = true
+		}
+
+		for tokenAddr := range allTokens {
+			income := tokenDealsIncome[tokenAddr]
+			outcome := tokenDealsOutcome[tokenAddr]
+			balance := calculateTokenBalance(income, outcome)
+
+			// Skip zero balances
+			balanceRat, _ := new(big.Rat).SetString(balance)
+			if balanceRat.Sign() == 0 {
+				continue
+			}
+
+			// Get or create token balance entry
+			if _, exists := tokenBalancesMap[tokenAddr]; !exists {
+				// Get token symbol from database
+				var token trade.Token
+				err = db.First(&token, trade.Token{ChainId: chainId, Address: tokenAddr}).Error
+				symbol := "UNKNOWN"
+				if err == nil {
+					symbol = token.Symbol
+				}
+
+				tokenBalancesMap[tokenAddr] = &trade.TokenBalanceByChain{
+					ChainId:      chainId,
+					TokenAddress: tokenAddr,
+					TokenSymbol:  symbol,
+					TotalBalance: "0",
+					Wallets:      []trade.WalletBalance{},
+				}
+			}
+
+			// Add wallet balance
+			tokenBalancesMap[tokenAddr].Wallets = append(
+				tokenBalancesMap[tokenAddr].Wallets,
+				trade.WalletBalance{
+					WalletAddress: walletAddr,
+					Balance:       balance,
+				},
+			)
+
+			// Update total balance
+			currentTotal, _ := new(big.Rat).SetString(tokenBalancesMap[tokenAddr].TotalBalance)
+			walletBalance, _ := new(big.Rat).SetString(balance)
+			newTotal := new(big.Rat).Add(currentTotal, walletBalance)
+			tokenBalancesMap[tokenAddr].TotalBalance = newTotal.FloatString(6)
+		}
+	}
+
+	// Convert map to slice
+	result := make([]trade.TokenBalanceByChain, 0, len(tokenBalancesMap))
+	for _, tokenBalance := range tokenBalancesMap {
+		result = append(result, *tokenBalance)
+	}
+
+	// Cache the result
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		slog.Warn(fmt.Sprintf("[Cache] Failed to marshal token balances for chain %s: %v", chainId, err))
+	} else {
+		err = cm.SetWithTTL(cacheKey, resultJSON, 10*time.Minute)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("[Cache] Failed to cache token balances for chain %s: %v", chainId, err))
+		}
+	}
+
+	slog.Info(fmt.Sprintf("[Cache] Calculated token balances for chain %s: %d tokens", chainId, len(result)))
 	return result, nil
 }
