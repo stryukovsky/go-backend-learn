@@ -72,7 +72,6 @@ func ListChains(ctx *gin.Context, db *gorm.DB) {
 func ListAaveInteractions(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
-	
 	var aaveInteractions []trade.AaveInteraction
 	err := db.Preload("BlockchainEvent").
 		Joins("JOIN aave_events ON aave_events.id = aave_interactions.blockchain_event_id").
@@ -88,7 +87,6 @@ func ListAaveInteractions(ctx *gin.Context, db *gorm.DB) {
 func ListCompound3Interactions(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
-	
 	var compoundInteractions []trade.Compound3Interaction
 	err := db.Preload("BlockchainEvent").
 		Joins("JOIN compound3_events ON compound3_events.id = compound3_interactions.blockchain_event_id").
@@ -117,7 +115,6 @@ func GetTokenBalancesByChain(ctx *gin.Context, db *gorm.DB, cm *cache.CacheManag
 func ListUniswapV3Interactions(ctx *gin.Context, db *gorm.DB) {
 	wallet := common.HexToAddress(ctx.Param("wallet")).Hex()
 	chainId := ctx.Param("chainId")
-	
 	var uniswapv3Interactions []trade.UniswapV3Deal
 	err := db.Preload("BlockchainEvent").
 		Joins("JOIN uniswap_v3_events ON uniswap_v3_events.id = uniswap_v3_deals.blockchain_event_id").
@@ -158,6 +155,17 @@ func ListDealsByWalletAndChain(ctx *gin.Context, db *gorm.DB) {
 	ctx.JSON(http.StatusOK, result)
 }
 
+func ListTokensByChain(ctx *gin.Context, db *gorm.DB) {
+	chainId := ctx.Param("chainId")
+	var tokens []trade.Token
+	err := db.Where("chain_id = ?", chainId).Find(&tokens).Error
+	if err != nil {
+		apiErr(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, tokens)
+}
+
 func CreateApi(router *gin.Engine, db *gorm.DB, cm *cache.CacheManager) {
 	router.GET("/api/wallets", func(ctx *gin.Context) {
 		ListWallets(ctx, db)
@@ -188,5 +196,8 @@ func CreateApi(router *gin.Engine, db *gorm.DB, cm *cache.CacheManager) {
 	})
 	router.GET("/api/chain/:chainId/token-balances", func(ctx *gin.Context) {
 		GetTokenBalancesByChain(ctx, db, cm)
+	})
+	router.GET("/api/:chainId/tokens", func(ctx *gin.Context) {
+		ListTokensByChain(ctx, db)
 	})
 }
